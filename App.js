@@ -1,20 +1,56 @@
-import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import React from 'react';
+import { NavigationContainer } from '@react-navigation/native';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createStackNavigator } from '@react-navigation/stack';
+import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
+import LoginScreen from './screens/LoginScreen';
+import SignUpScreen from './screens/SignUpScreen';
+import SearchScreen from './screens/SearchScreen';
+import FriendsListScreen from './screens/FriendsListScreen';
+import FriendRequestsScreen from './screens/FriendRequestsScreen';
+import HomeScreen from './screens/HomeScreen';
+import MessageScreen from './screens/MessageScreen';
 
-export default function App() {
+const Stack = createStackNavigator();
+const Tab = createBottomTabNavigator();
+const TopTab = createMaterialTopTabNavigator();
+
+function AuthStack() {
   return (
-    <View style={styles.container}>
-      <Text>Open up App.js to start working on your app!</Text>
-      <StatusBar style="auto" />
-    </View>
+    <Stack.Navigator>
+      <Stack.Screen name="Login" component={LoginScreen} />
+      <Stack.Screen name="SignUp" component={SignUpScreen} />
+    </Stack.Navigator>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
+function SearchTabNavigator() {
+  return (
+    <TopTab.Navigator>
+      <TopTab.Screen name="SearchTab" component={SearchScreen} />
+      <TopTab.Screen name="My Friends" component={FriendsListScreen} />
+      <TopTab.Screen name="Requests" component={FriendRequestsScreen} />
+    </TopTab.Navigator>
+  );
+}
+
+function AppTabs() {
+  return (
+    <Tab.Navigator>
+      <Tab.Screen name="Friends" component={SearchTabNavigator} />
+      <Tab.Screen name="Noichu" component={HomeScreen} />
+      <Tab.Screen name="Messages" component={MessageScreen} />
+    </Tab.Navigator>
+  );
+}
+
+export default function App() {
+  return (
+    <NavigationContainer>
+      <Stack.Navigator>
+        <Stack.Screen name="Auth" component={AuthStack} options={{ headerShown: false }} />
+        <Stack.Screen name="App" component={AppTabs} options={{ headerShown: false }} />
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+}
