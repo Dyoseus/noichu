@@ -22,7 +22,7 @@ export default function FriendRequestsScreen({ onFriendAccepted }) {
       querySnapshot.forEach((doc) => {
         requestsList.push({ id: doc.id, ...doc.data() });
       });
-
+      
       setRequests(requestsList);
     };
 
