@@ -92,6 +92,7 @@ export default function SearchScreen() {
       <TextInput
         style={styles.input}
         placeholder="Find friends by username"
+        placeholderTextColor="#ffffff"
         value={search}
         onChangeText={setSearch}
         autoCorrect={false} // Disable auto-correct to avoid interference
@@ -130,12 +131,13 @@ export default function SearchScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#f5E7B2',
+    backgroundColor: '#232323',
     flex: 1,
     justifyContent: 'center',
     padding: 16,
   },
   input: {
+    color: 'white',
     height: 40,
     borderColor: 'gray',
     borderWidth: 1,

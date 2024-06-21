@@ -1,16 +1,16 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, PanResponder, Animated, Alert } from 'react-native';
+import { View, Text, StyleSheet, Pressable, PanResponder, Animated } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { getAuth, signOut } from 'firebase/auth';
-import { getFirestore, collection, addDoc, deleteDoc, query, where, getDocs, doc, setDoc, getDoc } from 'firebase/firestore';
-import { app } from '../firebaseConfig'; // Ensure you import the initialized Firebase app
+import { getFirestore, collection, addDoc, deleteDoc, query, where, getDocs, doc, setDoc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { app } from '../firebaseConfig';
 
 const auth = getAuth(app);
 const db = getFirestore(app);
 
 export default function HomeScreen({ navigation }) {
-  const [dailyChatFriend, setDailyChatFriend] = useState(null);
-  const [messages, setMessages] = useState([]);
   const [username, setUsername] = useState('');
+  const [inQueue, setInQueue] = useState(false);
   const pan = useRef(new Animated.ValueXY()).current;
   const queueTimeoutRef = useRef(null);
 
@@ -36,7 +36,7 @@ export default function HomeScreen({ navigation }) {
         { useNativeDriver: false }
       ),
       onPanResponderRelease: async (e, gestureState) => {
-        if (gestureState.dy < -50) { // Detect swipe up
+        if (gestureState.dy < -50 && !inQueue) { // Detect swipe up and check if not in queue
           await handleJoinQueue();
         }
         Animated.spring(pan, { toValue: { x: 0, y: 0 }, useNativeDriver: false }).start();
@@ -46,7 +46,9 @@ export default function HomeScreen({ navigation }) {
 
   const handleJoinQueue = async () => {
     const user = auth.currentUser;
-    if (!user) return;
+    if (!user || inQueue) return;
+
+    setInQueue(true);
 
     try {
       const queueRef = collection(db, 'queue');
@@ -65,9 +67,11 @@ export default function HomeScreen({ navigation }) {
       queueTimeoutRef.current = setTimeout(() => {
         alert('No pair found. Please try again later.');
         leaveQueue(user.uid);
-      }, 20000); // 20 seconds timeout
+        setInQueue(false); // Reset inQueue state
+      }, 5000); // 5 seconds timeout
     } catch (error) {
       console.error('Error joining queue: ', error);
+      setInQueue(false); // Reset inQueue state in case of error
     }
   };
 
@@ -81,24 +85,62 @@ export default function HomeScreen({ navigation }) {
         const pairDoc = queueSnapshot.docs[0];
         const pairData = pairDoc.data();
 
-        const chatId = `${userId}_${pairData.userId}`;
+        const chatId = [userId, pairData.userId].sort().join('_');
         const chatDocRef = doc(db, 'chats', chatId);
 
         await setDoc(chatDocRef, {
           users: [userId, pairData.userId],
+          usernames: {
+            [userId]: username,
+            [pairData.userId]: pairData.username,
+          },
           timestamp: new Date(),
+          user1Joined: false,
+          user2Joined: false,
+          active: true,
         });
 
         // Remove both users from the queue
         await deleteDoc(doc(queueRef, pairDoc.id));
         await leaveQueue(userId);
 
-        // Navigate both users to the chat screen
-        navigation.navigate('Chat', { friendId: pairData.userId, friendName: pairData.username });
+        // Notify both users of the chat
+        await notifyUser(pairData.userId, chatId, userId, username);
+        await notifyUser(userId, chatId, pairData.userId, pairData.username);
+
         clearTimeout(queueTimeoutRef.current);
+        setInQueue(false); // Reset inQueue state
+      } else {
+        console.log('No pair found in queue');
       }
     } catch (error) {
       console.error('Error checking for pair: ', error);
+      setInQueue(false); // Reset inQueue state in case of error
+    }
+  };
+
+  const notifyUser = async (userId, chatId, friendId, friendName) => {
+    try {
+      const chatDocRef = doc(db, 'chats', chatId);
+
+      // Listen for changes to the chat document
+      const unsubscribe = onSnapshot(chatDocRef, (chatDoc) => {
+        if (chatDoc.exists() && chatDoc.data().user1Joined && chatDoc.data().user2Joined) {
+          // Navigate the current user to the chat screen
+          if (auth.currentUser.uid === userId) {
+            navigation.navigate('Chat', { friendId: friendId, friendName: friendName, chatId: chatId });
+          }
+        }
+      });
+
+      // Mark the user as joined
+      await updateDoc(chatDocRef, {
+        [`${userId === auth.currentUser.uid ? 'user1Joined' : 'user2Joined'}`]: true,
+      });
+
+      return () => unsubscribe();
+    } catch (error) {
+      console.error('Error notifying user: ', error);
     }
   };
 
@@ -122,31 +164,28 @@ export default function HomeScreen({ navigation }) {
   };
 
   return (
-    <Animated.View 
-      style={[styles.container, pan.getLayout()]} 
-      {...panResponder.panHandlers}
-    >
-      <Pressable style={styles.logoutButton} onPress={handleLogout}>
-        <Text style={styles.logoutButtonText}>Logout</Text>
-      </Pressable>
-      <Text style={styles.title}>Welcome {username}! Swipe up to find a chat</Text>
-      <FlatList
-        data={messages}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <View style={styles.messageContainer}>
-            <Text style={styles.sender}>{item.sender}:</Text>
-            <Text style={styles.message}>{item.text}</Text>
-          </View>
-        )}
-      />
-    </Animated.View>
+    <SafeAreaView style={styles.safeArea}>
+      <Animated.View 
+        style={[styles.container, pan.getLayout()]} 
+        {...panResponder.panHandlers}
+      >
+        <Pressable style={styles.logoutButton} onPress={handleLogout}>
+          <Text style={styles.logoutButtonText}>Logout</Text>
+        </Pressable>
+        <View style={styles.titleContainer}>
+          <Text style={styles.title}>Welcome {username}! Swipe up to find a chat</Text>
+        </View>
+      </Animated.View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#232323',
+  },
   container: {
-    backgroundColor: '#f5E7B2',
     flex: 1,
     padding: 16,
   },
@@ -164,21 +203,14 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
   },
+  titleContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 16,
-  },
-  messageContainer: {
-    marginBottom: 12,
-    padding: 8,
-    backgroundColor: '#f1f1f1',
-    borderRadius: 8,
-  },
-  sender: {
-    fontWeight: 'bold',
-  },
-  message: {
-    fontSize: 16,
+    color: '#ff4444',
   },
 });

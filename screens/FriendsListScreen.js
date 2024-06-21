@@ -1,13 +1,15 @@
+// FriendsListScreen.js
+
 import React, { useState, useEffect } from 'react';
 import { View, Text, FlatList, StyleSheet, TouchableOpacity, Modal, Button } from 'react-native';
-import { getFirestore, collection, query, where, getDocs, doc, getDoc, deleteDoc } from 'firebase/firestore';
+import { getFirestore, collection, query, where, getDocs, doc, getDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { app } from '../firebaseConfig';
 
 const db = getFirestore(app);
 const auth = getAuth(app);
 
-export default function FriendsListScreen({ refresh }) {
+export default function FriendsListScreen({ refresh, onFriendRemoved }) {
   const [friends, setFriends] = useState([]);
   const [selectedFriend, setSelectedFriend] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
@@ -17,7 +19,7 @@ export default function FriendsListScreen({ refresh }) {
     const fetchFriends = async () => {
       if (!currentUser) return;
 
-      console.log('Fetching friends list...'); // Log to check when fetching occurs
+      console.log('Fetching friends list...');
 
       const q = query(collection(db, 'friends'), where('userId', '==', currentUser.uid));
       const querySnapshot = await getDocs(q);
@@ -40,6 +42,26 @@ export default function FriendsListScreen({ refresh }) {
     fetchFriends();
   }, [currentUser, refresh]); // Add refresh to the dependency array to refetch friends when it changes
 
+  useEffect(() => {
+    const q = query(collection(db, 'friends'), where('userId', '==', currentUser.uid));
+    const unsubscribe = onSnapshot(q, async (snapshot) => {
+      const friendsList = [];
+      for (const docSnapshot of snapshot.docs) {
+        const friendData = docSnapshot.data();
+        const friendDoc = await getDoc(doc(db, 'users', friendData.friendId));
+        if (friendDoc.exists()) {
+          friendsList.push({
+            id: friendData.friendId,
+            username: friendDoc.data().username,
+          });
+        }
+      }
+      setFriends(friendsList);
+    });
+
+    return () => unsubscribe();
+  }, [currentUser]);
+
   const handleRemoveButtonPress = (friend) => {
     setSelectedFriend(friend);
     setModalVisible(true);
@@ -57,6 +79,9 @@ export default function FriendsListScreen({ refresh }) {
       setModalVisible(false);
       setSelectedFriend(null);
       alert('Friend removed successfully');
+      if (typeof onFriendRemoved === 'function') {
+        onFriendRemoved(); // Call the callback to indicate a friend was removed
+      }
     } catch (error) {
       alert('Failed to remove friend: ' + error.message);
     }
@@ -108,7 +133,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
-    backgroundColor: '#f5E7B2',
+    backgroundColor: '#232323',
   },
   friendContainer: {
     flexDirection: 'row',

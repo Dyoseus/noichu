@@ -1,13 +1,15 @@
+// FriendRequestsScreen.js
+
 import React, { useState, useEffect } from 'react';
 import { View, Text, FlatList, StyleSheet, Button } from 'react-native';
-import { getFirestore, collection, query, where, getDocs, doc, updateDoc, deleteDoc, setDoc } from 'firebase/firestore';
+import { getFirestore, collection, query, where, getDocs, doc, updateDoc, deleteDoc, setDoc, onSnapshot, getDoc } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { app } from '../firebaseConfig';
 
 const db = getFirestore(app);
 const auth = getAuth(app);
 
-export default function FriendRequestsScreen({ onFriendAccepted }) {
+export default function FriendRequestsScreen({ refresh, onFriendAccepted }) {
   const [requests, setRequests] = useState([]);
   const currentUser = auth.currentUser;
 
@@ -19,14 +21,43 @@ export default function FriendRequestsScreen({ onFriendAccepted }) {
       const querySnapshot = await getDocs(q);
       const requestsList = [];
 
-      querySnapshot.forEach((doc) => {
-        requestsList.push({ id: doc.id, ...doc.data() });
-      });
-      
+      for (const docSnapshot of querySnapshot.docs) {
+        const request = docSnapshot.data();
+        const fromUserDoc = await getDoc(doc(db, 'users', request.from));
+        if (fromUserDoc.exists()) {
+          requestsList.push({
+            id: docSnapshot.id,
+            from: request.from,
+            fromUsername: fromUserDoc.data().username,
+          });
+        }
+      }
+
       setRequests(requestsList);
     };
 
     fetchRequests();
+  }, [currentUser, refresh]);
+
+  useEffect(() => {
+    const q = query(collection(db, 'friendRequests'), where('to', '==', currentUser.uid), where('status', '==', 'pending'));
+    const unsubscribe = onSnapshot(q, async (snapshot) => {
+      const requestsList = [];
+      for (const docSnapshot of snapshot.docs) {
+        const request = docSnapshot.data();
+        const fromUserDoc = await getDoc(doc(db, 'users', request.from));
+        if (fromUserDoc.exists()) {
+          requestsList.push({
+            id: docSnapshot.id,
+            from: request.from,
+            fromUsername: fromUserDoc.data().username,
+          });
+        }
+      }
+      setRequests(requestsList);
+    });
+
+    return () => unsubscribe();
   }, [currentUser]);
 
   const handleAccept = async (request) => {
@@ -73,7 +104,7 @@ export default function FriendRequestsScreen({ onFriendAccepted }) {
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <View style={styles.requestContainer}>
-            <Text style={styles.requestText}>From: {item.from}</Text>
+            <Text style={styles.requestText}>From: {item.fromUsername}</Text>
             <Button title="Accept" onPress={() => handleAccept(item)} />
             <Button title="Reject" onPress={() => handleReject(item)} />
           </View>
@@ -87,7 +118,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
-    backgroundColor: '#f5E7B2',
+    backgroundColor: '#232323',
   },
   requestContainer: {
     padding: 12,

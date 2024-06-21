@@ -1,32 +1,183 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import { View, Text, TextInput, Pressable, FlatList, StyleSheet, KeyboardAvoidingView, Platform, Keyboard, SafeAreaView, Image } from 'react-native';
+import { getFirestore, doc, collection, addDoc, onSnapshot, orderBy, query, updateDoc, getDoc } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
+import { app } from '../firebaseConfig';
 
-export default function ChatScreen({ route }) {
-  const { friendId, friendName } = route.params;
+const db = getFirestore(app);
+const auth = getAuth(app);
+
+export default function ChatScreen({ route, navigation }) {
+  const { friendId, chatId } = route.params;
+  const [messages, setMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [friendName, setFriendName] = useState('');
+  const flatListRef = useRef(null);
+  const user = auth.currentUser;
+
+  useEffect(() => {
+    const fetchFriendName = async () => {
+      const friendDoc = await getDoc(doc(db, 'users', friendId));
+      if (friendDoc.exists()) {
+        setFriendName(friendDoc.data().username);
+      }
+    };
+
+    fetchFriendName();
+
+    const messagesRef = collection(db, 'chats', chatId, 'messages');
+    const q = query(messagesRef, orderBy('timestamp', 'desc'));
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const updatedMessages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).reverse();
+      setMessages(updatedMessages);
+    });
+
+    return () => unsubscribe();
+  }, [chatId, friendId]);
+
+  useLayoutEffect(() => {
+    if (flatListRef.current) {
+      setTimeout(() => flatListRef.current.scrollToEnd({ animated: true }), 100);
+    }
+  }, [messages]);
+
+  const handleLeaveChat = () => {
+    navigation.goBack();
+  };
+
+  const handleSendMessage = async () => {
+    if (newMessage.trim() === '') return;
+    const messagesRef = collection(db, 'chats', chatId, 'messages');
+    await addDoc(messagesRef, {
+      text: newMessage,
+      sender: user.uid,
+      timestamp: new Date(),
+    });
+    setNewMessage('');
+  };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Chat with {friendName}</Text>
-      <Text style={styles.subtitle}>Friend ID: {friendId}</Text>
-    </View>
+    <SafeAreaView style={styles.safeArea}>
+      <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}>
+        <View style={styles.header}>
+          <Pressable onPress={handleLeaveChat} style={styles.leaveButton}>
+            <Image source={require('../assets/arrow.png')} style={styles.leaveImage} />
+          </Pressable>
+          <Text style={styles.title}>Chat with {friendName}</Text>
+        </View>
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          renderItem={({ item }) => (
+            <View style={[styles.messageContainer, item.sender === user.uid ? styles.userMessage : styles.otherMessage]}>
+              <Text style={[styles.messageText, item.sender === user.uid ? styles.userMessageText : null]}>{item.text}</Text>
+              <Text style={styles.timestamp}>{new Date(item.timestamp.seconds * 1000).toLocaleTimeString()}</Text>
+            </View>
+          )}
+          keyExtractor={item => item.id}
+          ListFooterComponent={<View style={{ height: 20 }} />}
+        />
+        <View style={styles.inputContainer}>
+          <TextInput
+            style={styles.input}
+            value={newMessage}
+            onChangeText={setNewMessage}
+            placeholder="Type a message"
+            placeholderTextColor="#aaa"
+          />
+          <Pressable style={styles.sendButton} onPress={handleSendMessage}>
+            <Text style={styles.sendButtonText}>Send</Text>
+          </Pressable>
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    paddingTop: Platform.OS === 'android' ? 25 : 0, // Adjust top padding for Android notch
+    backgroundColor: '#232323',
+  },
   container: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
     padding: 20,
-    backgroundColor: '#f5E7B2',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+    position: 'relative',
+  },
+  leaveButton: {
+    position: 'absolute',
+    left: 10,
+    top: 1, // Adjust for better accessibility
+  },
+  leaveImage: {
+    width: 25,
+    height: 25,
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 10,
+    color: '#ff4444',
   },
-  subtitle: {
-    fontSize: 18,
-    color: '#555',
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    padding: 4,
+    backgroundColor: '#fff',
+    borderTopWidth: 1,
+    borderTopColor: '#ddd',
   },
+  input: {
+    flex: 1,
+    height: 40,
+    borderColor: '#ccc',
+    borderWidth: 1,
+    marginRight: 10,
+    paddingHorizontal: 10,
+    borderRadius: 5,
+  },
+  sendButton: {
+    backgroundColor: '#2f4f4f',
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderRadius: 5,
+  },
+  sendButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  messageContainer: {
+    marginVertical: 5,
+    padding: 10,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    alignSelf: 'stretch',
+  },
+  messageText: {
+    fontSize: 16,
+  },
+  userMessage: {
+    alignSelf: 'flex-end',
+    backgroundColor: '#ff4444',
+  },
+  otherMessage: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#f0f0f0',
+  },
+  userMessageText: {
+    color: '#fff',
+  },
+  timestamp: {
+    fontSize: 10,
+    color: '#c7c7c7',
+    alignSelf: 'flex-end',
+  }
 });

@@ -1,9 +1,11 @@
+// App.js
+
 import React, { useState } from 'react';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { createStackNavigator } from '@react-navigation/stack';
+import { createStackNavigator, TransitionPresets } from '@react-navigation/stack';
 import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
-import { View, Text, StyleSheet } from 'react-native';
 import LoginScreen from './screens/LoginScreen';
 import SignUpScreen from './screens/SignUpScreen';
 import SearchScreen from './screens/SearchScreen';
@@ -19,7 +21,7 @@ const TopTab = createMaterialTopTabNavigator();
 
 function AuthStack() {
   return (
-    <Stack.Navigator>
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="Login" component={LoginScreen} />
       <Stack.Screen name="SignUp" component={SignUpScreen} />
     </Stack.Navigator>
@@ -27,36 +29,47 @@ function AuthStack() {
 }
 
 function SearchTabNavigator() {
-  const [refresh, setRefresh] = useState(false);
+  const [refreshFriends, setRefreshFriends] = useState(false);
+  const [refreshRequests, setRefreshRequests] = useState(false);
 
   const handleFriendAccepted = () => {
-    setRefresh(!refresh); // Toggle refresh state
+    setRefreshFriends(!refreshFriends); // Toggle refreshFriends state
+  };
+
+  const handleRequestReceived = () => {
+    setRefreshRequests(!refreshRequests); // Toggle refreshRequests state
+  };
+
+  const handleFriendRemoved = () => {
+    setRefreshFriends(!refreshFriends); // Toggle refreshFriends state
   };
 
   return (
-    <TopTab.Navigator
-      screenOptions={{
-        tabBarLabelStyle: { fontSize: 10, fontWeight: 'bold', padding: 0 },
-        tabBarStyle: { backgroundColor: '#f5E7B2' },
-        tabBarIndicatorStyle: { backgroundColor: '#ff4444', height: 0 },
-        tabBarActiveTintColor: '#ff4444',
-        tabBarInactiveTintColor: '#333',
-        tabBarItemStyle: {
-          borderRadius: 15, 
-          marginVertical: 5, 
-          marginHorizontal: 5,
-          backgroundColor: '#fff',
-        },
-      }}
-    >
-      <TopTab.Screen name="Search" component={SearchScreen} />
-      <TopTab.Screen name="MyFriends">
-        {() => <FriendsListScreen refresh={refresh} />}
-      </TopTab.Screen>
-      <TopTab.Screen name="Requests">
-        {() => <FriendRequestsScreen onFriendAccepted={handleFriendAccepted} />}
-      </TopTab.Screen>
-    </TopTab.Navigator>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#232323' }}>
+      <TopTab.Navigator
+        screenOptions={{
+          tabBarLabelStyle: { fontSize: 14, fontWeight: 'bold', padding: 0 },
+          tabBarStyle: { backgroundColor: '#232323' },
+          tabBarIndicatorStyle: { backgroundColor: '#ff4444', height: 0 },
+          tabBarActiveTintColor: '#ff4444',
+          tabBarInactiveTintColor: '#333',
+          tabBarItemStyle: {
+            borderRadius: 25, 
+            marginVertical: 5, 
+            marginHorizontal: 5,
+            backgroundColor: '#fff',
+          },
+        }}
+      >
+        <TopTab.Screen name="Search" component={SearchScreen} />
+        <TopTab.Screen name="My Friends">
+          {() => <FriendsListScreen refresh={refreshFriends} onFriendRemoved={handleFriendRemoved} />}
+        </TopTab.Screen>
+        <TopTab.Screen name="Requests">
+          {() => <FriendRequestsScreen refresh={refreshRequests} onFriendAccepted={handleFriendAccepted} />}
+        </TopTab.Screen>
+      </TopTab.Navigator>
+    </SafeAreaView>
   );
 }
 
@@ -65,9 +78,10 @@ function AppTabs() {
     <Tab.Navigator
       screenOptions={{
         tabBarActiveTintColor: '#ff4444',
-        tabBarInactiveTintColor: '#333',
+        tabBarInactiveTintColor: 'white',
         tabBarLabelStyle: { fontSize: 12, fontWeight: 'bold' },
-        tabBarStyle: { backgroundColor: '#f5E7B2' },
+        tabBarStyle: { backgroundColor: '#2f4f4f' },
+        headerShown: false, // Hide header for bottom tabs
       }}
     >
       <Tab.Screen name="Friends" component={SearchTabNavigator} />
@@ -79,12 +93,20 @@ function AppTabs() {
 
 export default function App() {
   return (
-    <NavigationContainer>
-      <Stack.Navigator>
-        <Stack.Screen name="Auth" component={AuthStack} options={{ headerShown: false }} />
-        <Stack.Screen name="App" component={AppTabs} options={{ headerShown: false }} />
-        <Stack.Screen name="Chat" component={ChatScreen} />
-      </Stack.Navigator>
-    </NavigationContainer>
+    <SafeAreaProvider>
+      <NavigationContainer>
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="Auth" component={AuthStack} />
+          <Stack.Screen name="App" component={AppTabs} />
+          <Stack.Screen
+            name="Chat"
+            component={ChatScreen}
+            options={{
+              ...TransitionPresets.ModalSlideFromBottomIOS,
+            }}
+          />
+        </Stack.Navigator>
+      </NavigationContainer>
+    </SafeAreaProvider>
   );
 }
