@@ -1,3 +1,4 @@
+// ChatScreen.js
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { View, Text, TextInput, Pressable, FlatList, StyleSheet, KeyboardAvoidingView, Platform, Keyboard, SafeAreaView, Image } from 'react-native';
 import { getFirestore, doc, collection, addDoc, onSnapshot, orderBy, query, updateDoc, getDoc, where, getDocs, deleteDoc, setDoc } from 'firebase/firestore';
@@ -76,8 +77,20 @@ export default function ChatScreen({ route, navigation }) {
   const handleFindNewChat = () => {
     navigation.navigate('Home', { autoQueue: true });
   };
-  
 
+  // This useEffect will mark the user as not joined when they leave the ChatScreen
+  useEffect(() => {
+    const chatDocRef = doc(db, 'chats', chatId);
+
+    const unsubscribe = navigation.addListener('beforeRemove', () => {
+      // Mark the user as not joined when leaving the chat screen
+      updateDoc(chatDocRef, {
+        [`${user.uid === route.params.friendId ? 'user1Joined' : 'user2Joined'}`]: false,
+      });
+    });
+
+    return unsubscribe;
+  }, [chatId, navigation, route.params.friendId, user.uid]);
 
   return (
     <SafeAreaView style={styles.safeArea}>

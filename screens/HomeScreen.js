@@ -12,7 +12,6 @@ const db = getFirestore(app);
 export default function HomeScreen({ navigation, route }) {
   const [username, setUsername] = useState('');
   const [inQueue, setInQueue] = useState(false);
-  const pan = useRef(new Animated.ValueXY()).current;
   const queueTimeoutRef = useRef(null);
 
   useEffect(() => {
@@ -28,146 +27,96 @@ export default function HomeScreen({ navigation, route }) {
 
     fetchUserData();
 
-    // This part checks for the autoQueue parameter to trigger joining the queue
     if (route.params?.autoQueue) {
       handleJoinQueue();
     }
-}, [route.params?.autoQueue]);
+  }, [route.params?.autoQueue]);
 
-const handleJoinQueue = async () => {
-  const user = auth.currentUser;
-  if (!user || inQueue) return;
+  const handleJoinQueue = async () => {
+    const user = auth.currentUser;
+    if (!user || inQueue) return;
 
-  setInQueue(true);
+    setInQueue(true);
 
-  try {
-    const queueRef = collection(db, 'queue');
-    const existingQueueQuery = query(queueRef, where('userId', '==', user.uid));
-    const existingQueueSnapshot = await getDocs(existingQueueQuery);
-
-    if (existingQueueSnapshot.empty) {
-      await addDoc(queueRef, {
-        userId: user.uid,
-        username: username,
-        timestamp: new Date(),
-      });
-      checkForPair(user.uid); // Move checkForPair here to ensure user is added first
-    }
-
-    queueTimeoutRef.current = setTimeout(async () => {
-      console.log('Timeout reached, checking for pairs again.');
-      const refreshed = await checkForPair(user.uid);
-      if (!refreshed) {
-        alert('No pair found. Please try again later.');
-        await leaveQueue(user.uid);
-        setInQueue(false);
-      }
-    }, 5000); // Check again after timeout to handle race conditions
-  } catch (error) {
-    console.error('Error joining queue: ', error);
-    setInQueue(false);
-  }
-};
-
-  
-  const checkForPair = async (userId) => {
     try {
       const queueRef = collection(db, 'queue');
-      const queueQuery = query(queueRef, where('userId', '!=', userId));
-      const queueSnapshot = await getDocs(queueQuery);
-  
-      if (!queueSnapshot.empty) {
-        const pairDoc = queueSnapshot.docs[0];
-        const pairData = pairDoc.data();
-  
-        const chatId = [userId, pairData.userId].sort().join('_');
-        const chatDocRef = doc(db, 'chats', chatId);
-  
-        const chatDoc = await getDoc(chatDocRef);
-        if (!chatDoc.exists()) {
-          await setDoc(chatDocRef, {
-            users: [userId, pairData.userId],
-            usernames: {
-              [userId]: username,
-              [pairData.userId]: pairData.username,
-            },
-            timestamp: new Date(),
-            active: true,
-            user1Joined: true,
-            user2Joined: false, // initially set to false
-          });
-        }
-  
-        // Update the document to show both users have joined
-        await updateDoc(chatDocRef, {
-          user1Joined: true,
-          user2Joined: true,
+      const existingQueueQuery = query(queueRef, where('userId', '==', user.uid));
+      const existingQueueSnapshot = await getDocs(existingQueueQuery);
+
+      if (existingQueueSnapshot.empty) {
+        await addDoc(queueRef, {
+          userId: user.uid,
+          username: username,
+          timestamp: new Date(),
         });
-  
-        // Ensure both users are navigated to the Chat screen
-        if (auth.currentUser.uid === userId) {
-          navigation.navigate('Chat', { friendId: pairData.userId, friendName: pairData.username, chatId: chatId });
-        } else {
-          // Navigate the other user to the chat screen
-          await notifyUser(pairData.userId, chatId, userId, username);
-        }
-  
-        await deleteDoc(doc(queueRef, pairDoc.id));
-        await leaveQueue(userId);
-        await leaveQueue(pairData.userId);
-  
-        clearTimeout(queueTimeoutRef.current);
-        setInQueue(false); 
-      } else {
-        console.log('No pair found in queue');
+
+        // Start listening for a pair after adding to the queue
+        const unsubscribe = onSnapshot(queueRef, async (snapshot) => {
+          if (snapshot.size >= 2) {
+            // Get the first two users in the queue
+            const user1Doc = snapshot.docs[0];
+            const user2Doc = snapshot.docs[1];
+
+            // Create a chat document
+            const chatId = [user1Doc.data().userId, user2Doc.data().userId].sort().join('_');
+            const chatDocRef = doc(db, 'chats', chatId);
+            await setDoc(chatDocRef, {
+              users: [user1Doc.data().userId, user2Doc.data().userId],
+              usernames: {
+                [user1Doc.data().userId]: user1Doc.data().username,
+                [user2Doc.data().userId]: user2Doc.data().username,
+              },
+              timestamp: new Date(),
+              active: true,
+              user1Joined: false, // Set to false initially
+              user2Joined: false, // Set to false initially
+            });
+
+            // Remove users from the queue
+            await Promise.all([
+              deleteDoc(user1Doc.ref),
+              deleteDoc(user2Doc.ref),
+            ]);
+
+            // Navigate both users to the chat
+            const friendId = user1Doc.data().userId === user.uid ? user2Doc.data().userId : user1Doc.data().userId;
+            const friendName = user1Doc.data().userId === user.uid ? user2Doc.data().username : user1Doc.data().username;
+            navigation.navigate('Chat', { friendId, friendName, chatId });
+
+            // Stop listening for changes in the queue
+            unsubscribe();
+          }
+        });
+
+        // Set a timeout to stop listening for a pair after a certain time
+        queueTimeoutRef.current = setTimeout(async () => {
+          unsubscribe(); // Stop listening for changes
+          setInQueue(false);
+          alert('No pair found. Please try again later.');
+        }, 5000);
       }
     } catch (error) {
-      console.error('Error checking for pair: ', error);
+      console.error('Error joining queue: ', error);
       setInQueue(false);
-    }
-  };
-  
-
-
-  const notifyUser = async (userId, chatId, friendId, friendName) => {
-    try {
-      const chatDocRef = doc(db, 'chats', chatId);
-  
-      // 1. Update the document to show the user has joined
-      await updateDoc(chatDocRef, {
-        [`${userId === auth.currentUser.uid ? 'user1Joined' : 'user2Joined'}`]: true,
-      });
-  
-      // 2. Listen for changes to the chat document
-      const unsubscribe = onSnapshot(chatDocRef, (chatDoc) => {
-        if (chatDoc.exists() && chatDoc.data().user1Joined && chatDoc.data().user2Joined) {
-          // Navigate the current user to the chat screen
-          if (auth.currentUser.uid === userId) {
-            navigation.navigate('Chat', { friendId: friendId, friendName: friendName, chatId: chatId });
-          }
-        }
-      });
-  
-      return () => unsubscribe(); 
-    } catch (error) {
-      console.error('Error notifying user: ', error);
     }
   };
 
   const leaveQueue = async (userId) => {
+    clearTimeout(queueTimeoutRef.current);
+    setInQueue(false);
     const queueRef = collection(db, 'queue');
-    const existingQueueQuery = query(queueRef, where('userId', '==', userId));
-    const existingQueueSnapshot = await getDocs(existingQueueQuery);
-
-    existingQueueSnapshot.forEach(async (docSnapshot) => {
-      await deleteDoc(doc(db, 'queue', docSnapshot.id));
+    const q = query(queueRef, where('userId', '==', userId));
+    const snapshot = await getDocs(q);
+    snapshot.forEach(async (doc) => {
+      await deleteDoc(doc.ref);
     });
   };
 
   const handleLogout = async () => {
     try {
+      await leaveQueue(auth.currentUser.uid);
       await signOut(auth);
-      navigation.navigate('Auth'); // Navigate to Auth stack after logging out
+      navigation.navigate('Auth');
     } catch (error) {
       alert(error.message);
     }
