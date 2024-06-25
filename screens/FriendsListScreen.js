@@ -1,5 +1,4 @@
 // FriendsListScreen.js
-
 import React, { useState, useEffect } from 'react';
 import { View, Text, FlatList, StyleSheet, TouchableOpacity, Modal, Button } from 'react-native';
 import { getFirestore, collection, query, where, getDocs, doc, getDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
@@ -18,40 +17,54 @@ export default function FriendsListScreen({ refresh, onFriendRemoved }) {
   useEffect(() => {
     const fetchFriends = async () => {
       if (!currentUser) return;
-
-      console.log('Fetching friends list...');
-
-      const q = query(collection(db, 'friends'), where('userId', '==', currentUser.uid));
-      const querySnapshot = await getDocs(q);
+  
+      const q1 = query(collection(db, 'friends'), where('user1', '==', currentUser.uid), where('status', '==', 'accepted'));
+      const q2 = query(collection(db, 'friends'), where('user2', '==', currentUser.uid), where('status', '==', 'accepted'));
+      const [snapshot1, snapshot2] = await Promise.all([getDocs(q1), getDocs(q2)]);
       const friendsList = [];
-
-      for (const docSnapshot of querySnapshot.docs) {
+  
+      // Using for...of loop for snapshot1
+      for (const docSnapshot of snapshot1.docs) {
         const friendData = docSnapshot.data();
-        const friendDoc = await getDoc(doc(db, 'users', friendData.friendId));
-        if (friendDoc.exists()) {
+        const friendDoc = doc(db, 'users', friendData.user2);
+        const friendDocSnapshot = await getDoc(friendDoc);
+        if (friendDocSnapshot.exists()) {
           friendsList.push({
-            id: friendData.friendId,
-            username: friendDoc.data().username,
+            id: friendData.user2,
+            username: friendDocSnapshot.data().username,
           });
         }
       }
-
+  
+      // Using for...of loop for snapshot2
+      for (const docSnapshot of snapshot2.docs) {
+        const friendData = docSnapshot.data();
+        const friendDoc = doc(db, 'users', friendData.user1);
+        const friendDocSnapshot = await getDoc(friendDoc);
+        if (friendDocSnapshot.exists()) {
+          friendsList.push({
+            id: friendData.user1,
+            username: friendDocSnapshot.data().username,
+          });
+        }
+      }
+  
       setFriends(friendsList);
     };
-
+  
     fetchFriends();
-  }, [currentUser, refresh]); // Add refresh to the dependency array to refetch friends when it changes
+  }, [currentUser, refresh]);
 
   useEffect(() => {
-    const q = query(collection(db, 'friends'), where('userId', '==', currentUser.uid));
+    const q = query(collection(db, 'friends'), where('user1', '==', currentUser.uid), where('status', '==', 'accepted'));
     const unsubscribe = onSnapshot(q, async (snapshot) => {
       const friendsList = [];
       for (const docSnapshot of snapshot.docs) {
         const friendData = docSnapshot.data();
-        const friendDoc = await getDoc(doc(db, 'users', friendData.friendId));
+        const friendDoc = await getDoc(doc(db, 'users', friendData.user2));
         if (friendDoc.exists()) {
           friendsList.push({
-            id: friendData.friendId,
+            id: friendData.user2,
             username: friendDoc.data().username,
           });
         }
@@ -71,9 +84,8 @@ export default function FriendsListScreen({ refresh, onFriendRemoved }) {
     if (!selectedFriend) return;
 
     try {
-      // Remove friend relationship in both directions
+      // Remove friend relationship
       await deleteDoc(doc(db, 'friends', `${currentUser.uid}_${selectedFriend.id}`));
-      await deleteDoc(doc(db, 'friends', `${selectedFriend.id}_${currentUser.uid}`));
 
       setFriends(friends.filter(friend => friend.id !== selectedFriend.id));
       setModalVisible(false);

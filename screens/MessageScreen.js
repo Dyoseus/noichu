@@ -1,5 +1,3 @@
-// MessageScreen.js
-
 import React, { useState, useEffect } from 'react';
 import { View, Text, FlatList, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -20,16 +18,18 @@ export default function MessageScreen() {
     const fetchFriends = async () => {
       if (!currentUser) return;
 
-      const q = query(collection(db, 'friends'), where('userId', '==', currentUser.uid));
-      const querySnapshot = await getDocs(q);
+      // Fetch friends with chat history
+      const q1 = query(collection(db, 'friends'), where('user1', '==', currentUser.uid), where('status', '==', 'accepted'));
+      const q2 = query(collection(db, 'friends'), where('user2', '==', currentUser.uid), where('status', '==', 'accepted'));
+      const [snapshot1, snapshot2] = await Promise.all([getDocs(q1), getDocs(q2)]);
       const friendsList = [];
 
-      for (const docSnapshot of querySnapshot.docs) {
+      snapshot1.forEach(async (docSnapshot) => {
         const friendData = docSnapshot.data();
-        const friendDoc = await getDoc(doc(db, 'users', friendData.friendId));
+        const friendDoc = await getDoc(doc(db, 'users', friendData.user2));
+
         if (friendDoc.exists()) {
-          // Fetch the latest message for this friend
-          const chatId = [currentUser.uid, friendData.friendId].sort().join('_');
+          const chatId = [currentUser.uid, friendData.user2].sort().join('_'); 
           const messagesRef = collection(db, 'chats', chatId, 'messages');
           const latestMessageQuery = query(messagesRef, orderBy('timestamp', 'desc'), limit(1));
           const latestMessageSnapshot = await getDocs(latestMessageQuery);
@@ -38,13 +38,35 @@ export default function MessageScreen() {
             latestMessage = latestMessageSnapshot.docs[0].data().text;
           }
           friendsList.push({
-            id: friendData.friendId,
+            id: friendData.user2,
             username: friendDoc.data().username,
             latestMessage,
-            chatId
+            chatId,
           });
         }
-      }
+      });
+
+      snapshot2.forEach(async (docSnapshot) => {
+        const friendData = docSnapshot.data();
+        const friendDoc = await getDoc(doc(db, 'users', friendData.user1));
+
+        if (friendDoc.exists()) {
+          const chatId = [currentUser.uid, friendData.user1].sort().join('_'); 
+          const messagesRef = collection(db, 'chats', chatId, 'messages');
+          const latestMessageQuery = query(messagesRef, orderBy('timestamp', 'desc'), limit(1));
+          const latestMessageSnapshot = await getDocs(latestMessageQuery);
+          let latestMessage = '';
+          if (!latestMessageSnapshot.empty) {
+            latestMessage = latestMessageSnapshot.docs[0].data().text;
+          }
+          friendsList.push({
+            id: friendData.user1,
+            username: friendDoc.data().username,
+            latestMessage,
+            chatId,
+          });
+        }
+      });
 
       setFriends(friendsList);
     };

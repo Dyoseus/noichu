@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, TextInput, StyleSheet, FlatList, Text, TouchableOpacity, Modal, Button } from 'react-native';
 import { getFirestore, collection, query, where, getDocs, orderBy, startAt, endAt, limit, doc, setDoc, getDoc } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
-import { app } from '../firebaseConfig'; // Ensure you are importing the initialized Firebase app
+import { app } from '../firebaseConfig';
 
 const db = getFirestore(app);
 const auth = getAuth(app);
@@ -10,21 +10,35 @@ const auth = getAuth(app);
 export default function SearchScreen() {
   const [search, setSearch] = useState('');
   const [results, setResults] = useState([]);
+  const [suggestions, setSuggestions] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
 
   useEffect(() => {
     const fetchCurrentUser = async () => {
-      const user = auth.currentUser;
-      if (user) {
-        const userDoc = await getDoc(doc(db, 'users', user.uid));
-        setCurrentUser({ id: user.uid, ...userDoc.data() });
+      if (!auth.currentUser) {
+        console.log("No current user found");
+        return;
+      }
+      const userDocRef = doc(db, 'users', auth.currentUser.uid);
+      const userDoc = await getDoc(userDocRef);
+      if (userDoc.exists()) {
+        setCurrentUser({ id: userDoc.id, ...userDoc.data() });
+      } else {
+        console.log("User document not found");
       }
     };
-
+  
     fetchCurrentUser();
   }, []);
+  
+
+  useEffect(() => {
+    if (currentUser) {
+      fetchMutualFriends(currentUser.id).then(setSuggestions);
+    }
+  }, [currentUser]);
 
   useEffect(() => {
     if (search.trim() === '') {
@@ -40,7 +54,7 @@ export default function SearchScreen() {
           orderBy('username'),
           startAt(search),
           endAt(search + '\uf8ff'),
-          limit(5) // Limit the results to 5
+          limit(5) 
         );
 
         const querySnapshot = await getDocs(q);
@@ -80,12 +94,69 @@ export default function SearchScreen() {
       alert('Failed to send friend request: ' + error.message);
     }
   };
-  
 
   const closeModal = () => {
     setModalVisible(false);
     setSelectedUser(null);
   };
+
+  // Function to fetch mutual friends (directly within SearchScreen)
+  const fetchMutualFriends = async (currentUserUid) => {
+    if (!currentUserUid) {
+      console.error("Error: currentUserUid is undefined.");
+      return [];
+    }
+  
+    const friendsRef = collection(db, 'friends');
+    let currentUserFriends = new Set();
+  
+    try {
+      // Fetch current user's friends
+      let q = query(friendsRef, where('user1', '==', currentUserUid), where('status', '==', 'accepted'));
+      let friendsSnapshot = await getDocs(q);
+      friendsSnapshot.forEach(doc => currentUserFriends.add(doc.data().user2));
+  
+      q = query(friendsRef, where('user2', '==', currentUserUid), where('status', '==', 'accepted'));
+      friendsSnapshot = await getDocs(q);
+      friendsSnapshot.forEach(doc => currentUserFriends.add(doc.data().user1));
+  
+      // Fetch potential mutual friends
+      let potentialMutualFriends = new Set();
+      for (let friendId of currentUserFriends) {
+        q = query(friendsRef, where('user1', '==', friendId), where('status', '==', 'accepted'));
+        let theirFriendsSnapshot = await getDocs(q);
+        theirFriendsSnapshot.forEach(doc => {
+          if (doc.data().user2 !== currentUserUid && !currentUserFriends.has(doc.data().user2)) {
+            potentialMutualFriends.add(doc.data().user2);
+          }
+        });
+  
+        q = query(friendsRef, where('user2', '==', friendId), where('status', '==', 'accepted'));
+        theirFriendsSnapshot = await getDocs(q);
+        theirFriendsSnapshot.forEach(doc => {
+          if (doc.data().user1 !== currentUserUid && !currentUserFriends.has(doc.data().user1)) {
+            potentialMutualFriends.add(doc.data().user1);
+          }
+        });
+      }
+  
+      // Fetch details of mutual friends
+      let mutualFriends = [];
+      for (let userId of potentialMutualFriends) {
+        const userDocRef = doc(db, 'users', userId);
+        const userDoc = await getDoc(userDocRef);
+        if (userDoc.exists()) {
+          mutualFriends.push({ id: userId, ...userDoc.data() });
+        }
+      }
+  
+      return mutualFriends;
+    } catch (error) {
+      console.error("Error fetching mutual friends: ", error);
+      return [];
+    }
+  };
+  
 
   return (
     <View style={styles.container}>
@@ -95,11 +166,23 @@ export default function SearchScreen() {
         placeholderTextColor="#ffffff"
         value={search}
         onChangeText={setSearch}
-        autoCorrect={false} // Disable auto-correct to avoid interference
-        autoCapitalize="none" // Disable auto-capitalize to avoid case issues
+        autoCorrect={false} 
+        autoCapitalize="none" 
       />
       <FlatList
         data={results}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <TouchableOpacity onPress={() => handleUserPress(item)}>
+            <View style={styles.resultContainer}>
+              <Text style={styles.resultText}>{item.username}</Text>
+            </View>
+          </TouchableOpacity>
+        )}
+      />
+      <Text style={styles.suggestionTitle}>Suggestions</Text>
+      <FlatList
+        data={suggestions}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <TouchableOpacity onPress={() => handleUserPress(item)}>
@@ -153,6 +236,12 @@ const styles = StyleSheet.create({
   },
   resultText: {
     fontSize: 16,
+    fontFamily: 'sans-serif',
+  },
+  suggestionTitle: {
+    fontSize: 18,
+    color: 'white',
+    marginVertical: 10,
     fontFamily: 'sans-serif',
   },
   modalContainer: {

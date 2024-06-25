@@ -1,5 +1,4 @@
 // FriendRequestsScreen.js
-
 import React, { useState, useEffect } from 'react';
 import { View, Text, FlatList, StyleSheet, Button } from 'react-native';
 import { getFirestore, collection, query, where, getDocs, doc, updateDoc, deleteDoc, setDoc, onSnapshot, getDoc } from 'firebase/firestore';
@@ -65,16 +64,12 @@ export default function FriendRequestsScreen({ refresh, onFriendAccepted }) {
       const requestDocRef = doc(db, 'friendRequests', request.id);
       await updateDoc(requestDocRef, { status: 'accepted' });
 
-      // Create friend relationship in both directions
+      // Create friend relationship in both directions (using new friends collection structure)
       await setDoc(doc(db, 'friends', `${currentUser.uid}_${request.from}`), {
-        userId: currentUser.uid,
-        friendId: request.from,
+        user1: currentUser.uid,
+        user2: request.from,
         timestamp: new Date(),
-      });
-      await setDoc(doc(db, 'friends', `${request.from}_${currentUser.uid}`), {
-        userId: request.from,
-        friendId: currentUser.uid,
-        timestamp: new Date(),
+        status: 'accepted', // Or any other status you want to use
       });
 
       setRequests(requests.filter(req => req.id !== request.id));

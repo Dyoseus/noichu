@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { View, Text, TextInput, Pressable, FlatList, StyleSheet, KeyboardAvoidingView, Platform, Keyboard, SafeAreaView, Image } from 'react-native';
-import { getFirestore, doc, collection, addDoc, onSnapshot, orderBy, query, updateDoc, getDoc } from 'firebase/firestore';
+import { getFirestore, doc, collection, addDoc, onSnapshot, orderBy, query, updateDoc, getDoc, where, getDocs, deleteDoc, setDoc } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { app } from '../firebaseConfig';
 
@@ -12,7 +12,9 @@ export default function ChatScreen({ route, navigation }) {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [friendName, setFriendName] = useState('');
+  const [inQueue, setInQueue] = useState(false);
   const flatListRef = useRef(null);
+  const queueTimeoutRef = useRef(null);
   const user = auth.currentUser;
 
   useEffect(() => {
@@ -24,23 +26,37 @@ export default function ChatScreen({ route, navigation }) {
     };
 
     fetchFriendName();
-
     const messagesRef = collection(db, 'chats', chatId, 'messages');
     const q = query(messagesRef, orderBy('timestamp', 'desc'));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const updatedMessages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).reverse();
       setMessages(updatedMessages);
+      if (flatListRef.current) {
+        setTimeout(() => flatListRef.current.scrollToEnd({ animated: true }), 100);
+      }
     });
 
     return () => unsubscribe();
   }, [chatId, friendId]);
 
   useLayoutEffect(() => {
-    if (flatListRef.current) {
-      setTimeout(() => flatListRef.current.scrollToEnd({ animated: true }), 100);
-    }
-  }, [messages]);
+    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', _keyboardDidShow);
+    const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', _keyboardDidHide);
+
+    return () => {
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
+    };
+  }, []);
+
+  const _keyboardDidShow = () => {
+    flatListRef.current?.scrollToEnd({ animated: true });
+  };
+
+  const _keyboardDidHide = () => {
+    flatListRef.current?.scrollToEnd({ animated: true });
+  };
 
   const handleLeaveChat = () => {
     navigation.goBack();
@@ -57,14 +73,23 @@ export default function ChatScreen({ route, navigation }) {
     setNewMessage('');
   };
 
+  const handleFindNewChat = () => {
+    navigation.navigate('Home', { autoQueue: true });
+  };
+  
+
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}>
+      <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 5 : 20}>
         <View style={styles.header}>
           <Pressable onPress={handleLeaveChat} style={styles.leaveButton}>
             <Image source={require('../assets/arrow.png')} style={styles.leaveImage} />
           </Pressable>
           <Text style={styles.title}>Chat with {friendName}</Text>
+          <Pressable onPress={handleFindNewChat} style={styles.newChatButton}>
+            <Text style={styles.newChatButtonText}>New Chat</Text>
+          </Pressable>
         </View>
         <FlatList
           ref={flatListRef}
@@ -96,6 +121,18 @@ export default function ChatScreen({ route, navigation }) {
 }
 
 const styles = StyleSheet.create({
+  // ... other styles ...
+  newChatButton: {
+    position: 'absolute',
+    right: 0,
+    top: -5,
+    padding: 10,
+    backgroundColor: 'white', // Just as an example
+  },
+  newChatButtonText: {
+    color: '#000', // Adjust color to make it visible
+    fontWeight: 'bold',
+  },
   safeArea: {
     flex: 1,
     paddingTop: Platform.OS === 'android' ? 25 : 0, // Adjust top padding for Android notch
@@ -149,10 +186,6 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 15,
     borderRadius: 5,
-  },
-  sendButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
   },
   messageContainer: {
     marginVertical: 5,
