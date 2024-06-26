@@ -14,6 +14,8 @@ import FriendRequestsScreen from './screens/FriendRequestsScreen';
 import HomeScreen from './screens/HomeScreen';
 import MessageScreen from './screens/MessageScreen';
 import ChatScreen from './screens/ChatScreen';
+import VideoCallScreen from './screens/VideoCallScreen';
+import ProfileScreen from './screens/ProfileScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -85,8 +87,10 @@ function AppTabs() {
       }}
     >
       <Tab.Screen name="Friends" component={SearchTabNavigator} />
+      <Tab.Screen name="Video" component={VideoCallScreen} />
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Messages" component={MessageScreen} />
+      <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
   );
 }

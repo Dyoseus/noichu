@@ -22,53 +22,41 @@ export default function MessageScreen() {
       const q1 = query(collection(db, 'friends'), where('user1', '==', currentUser.uid), where('status', '==', 'accepted'));
       const q2 = query(collection(db, 'friends'), where('user2', '==', currentUser.uid), where('status', '==', 'accepted'));
       const [snapshot1, snapshot2] = await Promise.all([getDocs(q1), getDocs(q2)]);
-      const friendsList = [];
 
-      snapshot1.forEach(async (docSnapshot) => {
-        const friendData = docSnapshot.data();
-        const friendDoc = await getDoc(doc(db, 'users', friendData.user2));
+      const friendPromises = []; // Array to store promises for each friend
 
-        if (friendDoc.exists()) {
-          const chatId = [currentUser.uid, friendData.user2].sort().join('_'); 
-          const messagesRef = collection(db, 'chats', chatId, 'messages');
-          const latestMessageQuery = query(messagesRef, orderBy('timestamp', 'desc'), limit(1));
-          const latestMessageSnapshot = await getDocs(latestMessageQuery);
-          let latestMessage = '';
-          if (!latestMessageSnapshot.empty) {
-            latestMessage = latestMessageSnapshot.docs[0].data().text;
-          }
-          friendsList.push({
-            id: friendData.user2,
-            username: friendDoc.data().username,
-            latestMessage,
-            chatId,
-          });
-        }
+      snapshot1.forEach((docSnapshot) => {
+        friendPromises.push(getFriendData(docSnapshot.data().user2));
       });
 
-      snapshot2.forEach(async (docSnapshot) => {
-        const friendData = docSnapshot.data();
-        const friendDoc = await getDoc(doc(db, 'users', friendData.user1));
-
-        if (friendDoc.exists()) {
-          const chatId = [currentUser.uid, friendData.user1].sort().join('_'); 
-          const messagesRef = collection(db, 'chats', chatId, 'messages');
-          const latestMessageQuery = query(messagesRef, orderBy('timestamp', 'desc'), limit(1));
-          const latestMessageSnapshot = await getDocs(latestMessageQuery);
-          let latestMessage = '';
-          if (!latestMessageSnapshot.empty) {
-            latestMessage = latestMessageSnapshot.docs[0].data().text;
-          }
-          friendsList.push({
-            id: friendData.user1,
-            username: friendDoc.data().username,
-            latestMessage,
-            chatId,
-          });
-        }
+      snapshot2.forEach((docSnapshot) => {
+        friendPromises.push(getFriendData(docSnapshot.data().user1));
       });
 
+      // Wait for all friend data to be fetched
+      const friendsList = await Promise.all(friendPromises);
       setFriends(friendsList);
+    };
+
+    const getFriendData = async (friendId) => {
+      const friendDoc = await getDoc(doc(db, 'users', friendId));
+      if (friendDoc.exists()) {
+        const chatId = [currentUser.uid, friendId].sort().join('_');
+        const messagesRef = collection(db, 'chats', chatId, 'messages');
+        const latestMessageQuery = query(messagesRef, orderBy('timestamp', 'desc'), limit(1));
+        const latestMessageSnapshot = await getDocs(latestMessageQuery);
+        let latestMessage = '';
+        if (!latestMessageSnapshot.empty) {
+          latestMessage = latestMessageSnapshot.docs[0].data().text;
+        }
+        return {
+          id: friendId,
+          username: friendDoc.data().username,
+          latestMessage,
+          chatId,
+        };
+      }
+      return null; // Return null if friendDoc doesn't exist
     };
 
     fetchFriends();

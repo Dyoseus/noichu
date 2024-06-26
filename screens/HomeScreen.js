@@ -24,10 +24,11 @@ export default function HomeScreen({ navigation, route }) {
         }
       }
     };
-
+  
     fetchUserData();
-
-    if (route.params?.autoQueue) {
+  
+    // Only auto queue if explicitly set to true
+    if (route.params?.autoQueue === true) {
       handleJoinQueue();
     }
   }, [route.params?.autoQueue]);
@@ -56,7 +57,7 @@ export default function HomeScreen({ navigation, route }) {
             // Get the first two users in the queue
             const user1Doc = snapshot.docs[0];
             const user2Doc = snapshot.docs[1];
-
+        
             // Create a chat document
             const chatId = [user1Doc.data().userId, user2Doc.data().userId].sort().join('_');
             const chatDocRef = doc(db, 'chats', chatId);
@@ -71,26 +72,33 @@ export default function HomeScreen({ navigation, route }) {
               user1Joined: false, // Set to false initially
               user2Joined: false, // Set to false initially
             });
-
+        
             // Remove users from the queue
             await Promise.all([
               deleteDoc(user1Doc.ref),
               deleteDoc(user2Doc.ref),
             ]);
+        
+            // Clear the timeout to prevent the no-pair-found alert
+            clearTimeout(queueTimeoutRef.current);
+            // updating inqueue to false
+            setInQueue(false);
 
+        
             // Navigate both users to the chat
             const friendId = user1Doc.data().userId === user.uid ? user2Doc.data().userId : user1Doc.data().userId;
             const friendName = user1Doc.data().userId === user.uid ? user2Doc.data().username : user1Doc.data().username;
             navigation.navigate('Chat', { friendId, friendName, chatId });
-
+        
             // Stop listening for changes in the queue
             unsubscribe();
           }
         });
-
+        
         // Set a timeout to stop listening for a pair after a certain time
         queueTimeoutRef.current = setTimeout(async () => {
           unsubscribe(); // Stop listening for changes
+          await leaveQueue(user.uid); // Remove user from the queue
           setInQueue(false);
           alert('No pair found. Please try again later.');
         }, 5000);
@@ -103,24 +111,15 @@ export default function HomeScreen({ navigation, route }) {
 
   const leaveQueue = async (userId) => {
     clearTimeout(queueTimeoutRef.current);
-    setInQueue(false);
     const queueRef = collection(db, 'queue');
     const q = query(queueRef, where('userId', '==', userId));
     const snapshot = await getDocs(q);
     snapshot.forEach(async (doc) => {
-      await deleteDoc(doc.ref);
+      await deleteDoc(doc.ref); // Ensure users are removed
     });
+    setInQueue(false); // Ensure the UI is updated to reflect the user is not in queue
   };
-
-  const handleLogout = async () => {
-    try {
-      await leaveQueue(auth.currentUser.uid);
-      await signOut(auth);
-      navigation.navigate('Auth');
-    } catch (error) {
-      alert(error.message);
-    }
-  };
+  
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -130,16 +129,6 @@ export default function HomeScreen({ navigation, route }) {
           if (!inQueue) handleJoinQueue();
         }}
       >
-        <Pressable
-          style={styles.logoutButton}
-          onPress={handleLogout}
-          onPressIn={(event) => {
-            // Prevent this press from propagating to the parent Pressable
-            event.stopPropagation();
-          }}
-        >
-          <Text style={styles.logoutButtonText}>Logout</Text>
-        </Pressable>
         <View style={styles.titleContainer}>
           <Text style={styles.title}>{inQueue ? 'Finding a chat...' : `Welcome ${username}! Tap to find a chat`}</Text>
         </View>
@@ -156,20 +145,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
-  },
-  logoutButton: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    backgroundColor: '#ff4444',
-    borderRadius: 4,
-    zIndex: 1,
-  },
-  logoutButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
   },
   titleContainer: {
     flex: 1,
