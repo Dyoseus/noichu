@@ -1,12 +1,45 @@
-// ChatScreen.js
-import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
-import { View, Text, TextInput, Pressable, FlatList, StyleSheet, KeyboardAvoidingView, Platform, Keyboard, SafeAreaView, Image } from 'react-native';
-import { getFirestore, doc, collection, addDoc, onSnapshot, orderBy, query, updateDoc, getDoc, where, getDocs, deleteDoc, setDoc } from 'firebase/firestore';
+import React, { useState, useEffect, useRef, useLayoutEffect, useCallback } from 'react';
+import { 
+  View, 
+  Text, 
+  TextInput, 
+  Pressable, 
+  FlatList, 
+  StyleSheet, 
+  KeyboardAvoidingView, 
+  Platform, 
+  Keyboard, 
+  SafeAreaView, 
+  Image,
+  ActivityIndicator,
+} from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { 
+  getFirestore, 
+  doc, 
+  collection, 
+  addDoc, 
+  onSnapshot, 
+  orderBy, 
+  query, 
+  updateDoc, 
+  getDoc, 
+  where, 
+  getDocs, 
+  deleteDoc, 
+  setDoc,
+  startAfter,
+  limit,
+  getDocsFromCache, 
+  DocumentSnapshot
+} from 'firebase/firestore';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { getAuth } from 'firebase/auth';
 import { app } from '../firebaseConfig';
 
 const db = getFirestore(app);
 const auth = getAuth(app);
+const MESSAGES_PER_PAGE = 20; 
 
 export default function ChatScreen({ route, navigation }) {
   const { friendId, chatId } = route.params;
@@ -14,9 +47,25 @@ export default function ChatScreen({ route, navigation }) {
   const [newMessage, setNewMessage] = useState('');
   const [friendName, setFriendName] = useState('');
   const [inQueue, setInQueue] = useState(false);
+  const [lastVisible, setLastVisible] = useState(null);
+  const [loading, setLoading] = useState(false); // Track loading state
+  const [allMessagesLoaded, setAllMessagesLoaded] = useState(false);
   const flatListRef = useRef(null);
   const queueTimeoutRef = useRef(null);
   const user = auth.currentUser;
+  const [image, setImage] = useState(null);
+  const [uploading, setUploading] = useState(false); // Track uploading state
+
+  useEffect(() => {
+    (async () => {
+      if (Platform.OS !== 'web') {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          alert('Sorry, we need camera roll permissions to make this work!');
+        }
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     const fetchFriendName = async () => {
@@ -33,13 +82,16 @@ export default function ChatScreen({ route, navigation }) {
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const updatedMessages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).reverse();
       setMessages(updatedMessages);
-      if (flatListRef.current) {
-        setTimeout(() => flatListRef.current.scrollToEnd({ animated: true }), 100);
-      }
     });
 
     return () => unsubscribe();
   }, [chatId, friendId]);
+
+  useEffect(() => {
+    if (flatListRef.current) {
+      setTimeout(() => flatListRef.current.scrollToEnd({ animated: true }), 100);
+    }
+  }, [messages]);
 
   useLayoutEffect(() => {
     const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', _keyboardDidShow);
@@ -78,6 +130,53 @@ export default function ChatScreen({ route, navigation }) {
     navigation.navigate('Home', { autoQueue: true });
   };
 
+  const handleSelectImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.2,
+      });
+
+      if (!result.canceled) {
+        const source = { uri: result.assets[0].uri };
+        setImage(source);
+      }
+    } catch (error) {
+      console.error("Error selecting image: ", error);
+    }
+  };
+
+  const handleSendImage = async () => {
+    if (!image) return;
+
+    setUploading(true); // Set uploading state to true
+
+    try {
+      const storage = getStorage();
+      const storageRef = ref(storage, `images/${Date.now()}_${user.uid}.jpg`);
+      const response = await fetch(image.uri);
+      const blob = await response.blob();
+
+      await uploadBytes(storageRef, blob);
+      const downloadURL = await getDownloadURL(storageRef);
+
+      const messagesRef = collection(db, 'chats', chatId, 'messages');
+      await addDoc(messagesRef, {
+        imageUrl: downloadURL,
+        sender: user.uid,
+        timestamp: new Date(),
+      });
+
+      setImage(null);
+    } catch (error) {
+      console.error("Error uploading image: ", error);
+    } finally {
+      setUploading(false); // Set uploading state to false
+    }
+  };
+
   // This useEffect will mark the user as not joined when they leave the ChatScreen
   useEffect(() => {
     const chatDocRef = doc(db, 'chats', chatId);
@@ -109,14 +208,31 @@ export default function ChatScreen({ route, navigation }) {
           data={messages}
           renderItem={({ item }) => (
             <View style={[styles.messageContainer, item.sender === user.uid ? styles.userMessage : styles.otherMessage]}>
-              <Text style={[styles.messageText, item.sender === user.uid ? styles.userMessageText : null]}>{item.text}</Text>
+              {item.text ? (
+                <Text style={[styles.messageText, item.sender === user.uid ? styles.userMessageText : null]}>{item.text}</Text>
+              ) : (
+                <Image source={{ uri: item.imageUrl }} style={styles.messageImage} />
+              )}
               <Text style={styles.timestamp}>{new Date(item.timestamp.seconds * 1000).toLocaleTimeString()}</Text>
             </View>
           )}
           keyExtractor={item => item.id}
           ListFooterComponent={<View style={{ height: 20 }} />}
+          onContentSizeChange={() => {
+            if (flatListRef.current) {
+              flatListRef.current.scrollToEnd({ animated: true });
+            }
+          }}
         />
         <View style={styles.inputContainer}>
+        <Pressable style={styles.imageButton} onPress={handleSelectImage}>
+            <Text style={styles.imageButtonText}>🖼️</Text>
+          </Pressable>
+          {image && (
+            <Pressable style={styles.sendButton} onPress={handleSendImage}>
+              <Text style={styles.sendButtonText}>Send Image</Text>
+            </Pressable>
+          )}
           <TextInput
             style={styles.input}
             value={newMessage}
@@ -124,9 +240,11 @@ export default function ChatScreen({ route, navigation }) {
             placeholder="Type a message"
             placeholderTextColor="#aaa"
           />
+          
           <Pressable style={styles.sendButton} onPress={handleSendMessage}>
             <Text style={styles.sendButtonText}>Send</Text>
           </Pressable>
+          
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -184,27 +302,34 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderTopWidth: 1,
     borderTopColor: '#ddd',
+    borderRadius: 25,
   },
   input: {
     flex: 1,
     height: 40,
     borderColor: '#ccc',
     borderWidth: 1,
-    marginRight: 10,
+    marginRight: 5,
     paddingHorizontal: 10,
-    borderRadius: 5,
+    borderRadius: 25,
   },
   sendButton: {
     backgroundColor: '#2f4f4f',
     paddingVertical: 10,
     paddingHorizontal: 15,
-    borderRadius: 5,
+    marginRight: 5,
+    borderRadius: 25,
+  },
+  sendButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
   },
   messageContainer: {
     marginVertical: 5,
     padding: 10,
     backgroundColor: '#fff',
-    borderRadius: 10,
+    borderRadius: 15,
     alignSelf: 'stretch',
   },
   messageText: {
@@ -225,5 +350,21 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: '#c7c7c7',
     alignSelf: 'flex-end',
-  }
+  },
+  imageButton: {
+    backgroundColor: '#2f4f4f',
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderRadius: 30,
+    marginRight: 5,
+    marginLeft: 5,
+  },
+  imageButtonText: {
+    color: '#fff',
+  },
+  messageImage: {
+    width: 200,
+    height: 200,
+    borderRadius: 10,
+  },
 });

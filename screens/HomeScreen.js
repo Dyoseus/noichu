@@ -50,14 +50,36 @@ export default function HomeScreen({ navigation, route }) {
         await addDoc(queueRef, {
           userId: user.uid,
           username: username,
-          chatMode: chatMode,  // Include chat mode in the queue entry
+          chatMode: chatMode,
           timestamp: new Date(),
         });
   
         // Start listening for a pair after adding to the queue
         const unsubscribe = onSnapshot(queueRef, async (snapshot) => {
-          // Filter for eligible users based on chatMode
-          const potentialMatches = snapshot.docs.filter(doc => doc.data().userId !== user.uid && doc.data().chatMode === chatMode);
+          let potentialMatches;
+          if (chatMode === 'friends') {
+            // Fetch friends list from the database
+            const friendsQuery = query(collection(db, 'friends'), where('status', '==', 'accepted'), where('user1', '==', user.uid));
+            const friendsQuery2 = query(collection(db, 'friends'), where('status', '==', 'accepted'), where('user2', '==', user.uid));
+            const friendsSnapshot = await getDocs(friendsQuery);
+            const friendsSnapshot2 = await getDocs(friendsQuery2);
+            const friendIds = [
+              ...friendsSnapshot.docs.map(doc => doc.data().user2),
+              ...friendsSnapshot2.docs.map(doc => doc.data().user1),
+            ];
+  
+            potentialMatches = snapshot.docs.filter(doc =>
+              doc.data().userId !== user.uid &&
+              friendIds.includes(doc.data().userId) &&
+              doc.data().chatMode === chatMode
+            );
+          } else {
+            // For 'Everyone' mode, consider all users except self
+            potentialMatches = snapshot.docs.filter(doc =>
+              doc.data().userId !== user.uid &&
+              doc.data().chatMode === chatMode
+            );
+          }
   
           if (potentialMatches.length > 0) {
             const match = potentialMatches[0]; // Take the first eligible match
@@ -97,14 +119,14 @@ export default function HomeScreen({ navigation, route }) {
           await leaveQueue(user.uid); // Remove user from the queue
           setInQueue(false);
           alert('No pair found. Please try again later.');
-        }, 10000); // 
+        }, 5000); // Adjust timeout as needed
       }
     } catch (error) {
       console.error('Error joining queue: ', error);
       setInQueue(false);
     }
   };
-
+  
   const leaveQueue = async (userId) => {
     clearTimeout(queueTimeoutRef.current);
     const queueRef = collection(db, 'queue');
@@ -120,21 +142,26 @@ export default function HomeScreen({ navigation, route }) {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.switchContainer}>
-        <SwitchSelector
-          initial={0}
-          onPress={value => setChatMode(value)}
-          textColor='#ff4444' // text color
-          selectedColor='#fff' // text color when selected
-          buttonColor='#ff4444' // button background color
-          borderColor='#ff4444' // border color
-          hasPadding
-          options={[
-            { label: "Friends only", value: "friends" },
-            { label: "Friends and More", value: "friendsOfFriends" }
-          ]}
-          testID='chat-mode-selector'
-          accessibilityLabel='chat-mode-selector'
-        />
+      <SwitchSelector
+        initial={0}
+        onPress={async (value) => {
+          if (inQueue) {
+            await leaveQueue(auth.currentUser.uid);
+          }
+          setChatMode(value);
+        }}
+        textColor='#ff4444' // text color
+        selectedColor='#fff' // text color when selected
+        buttonColor='#ff4444' // button background color
+        borderColor='#ff4444' // border color
+        hasPadding
+        options={[
+          { label: "Friends only", value: "friends" },
+          { label: "Everyone", value: "everyone" }
+        ]}
+        testID='chat-mode-selector'
+        accessibilityLabel='chat-mode-selector'
+      />
       </View>
       <Pressable
         style={styles.container}

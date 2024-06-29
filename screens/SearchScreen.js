@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, TextInput, StyleSheet, FlatList, Text, TouchableOpacity, Modal, Button } from 'react-native';
+import { View, TextInput, StyleSheet, FlatList, Text, TouchableOpacity, Modal, Button, Alert } from 'react-native';
 import { getFirestore, collection, query, where, getDocs, orderBy, startAt, endAt, limit, doc, setDoc, getDoc } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { app } from '../firebaseConfig';
@@ -17,11 +17,12 @@ export default function SearchScreen() {
 
   useEffect(() => {
     const fetchCurrentUser = async () => {
-      if (!auth.currentUser) {
+      const user = auth.currentUser; 
+      if (!user) {
         console.log("No current user found");
         return;
       }
-      const userDocRef = doc(db, 'users', auth.currentUser.uid);
+      const userDocRef = doc(db, 'users', user.uid);
       const userDoc = await getDoc(userDocRef);
       if (userDoc.exists()) {
         setCurrentUser({ id: userDoc.id, ...userDoc.data() });
@@ -29,7 +30,7 @@ export default function SearchScreen() {
         console.log("User document not found");
       }
     };
-  
+
     fetchCurrentUser();
   }, []);
   
@@ -80,19 +81,52 @@ export default function SearchScreen() {
 
   const handleSendFriendRequest = async () => {
     if (!currentUser || !selectedUser) return;
-  
+
     try {
-      await setDoc(doc(db, 'friendRequests', `${selectedUser.id}_${currentUser.id}`), {
+      // Check for existing friend request
+      const existingRequestQuery = query(
+        collection(db, 'friendRequests'),
+        where('from', '==', currentUser.id),
+        where('to', '==', selectedUser.id),
+        where('status', '==', 'pending')
+      );
+      const existingRequestSnapshot = await getDocs(existingRequestQuery);
+
+      if (!existingRequestSnapshot.empty) {
+        Alert.alert('Friend Request Sent', 'You already have a pending friend request to this user.'); 
+        closeModal();
+        return;
+      }
+
+      // Check if already friends
+      const areAlreadyFriends = await checkIfFriends(currentUser.id, selectedUser.id);
+      if (areAlreadyFriends) {
+        Alert.alert('Already Friends', 'You are already friends with this user.');
+        closeModal();
+        return;
+      }
+
+      await setDoc(doc(db, 'friendRequests', `${currentUser.id}_${selectedUser.id}`), {
         from: currentUser.id,
         to: selectedUser.id,
         status: 'pending',
         timestamp: new Date(),
       });
-      alert('Friend request sent!');
-      closeModal();
+      Alert.alert('Success', 'Friend request sent successfully!'); 
+      closeModal(); 
     } catch (error) {
-      alert('Failed to send friend request: ' + error.message);
+      Alert.alert('Error', 'Failed to send friend request. Please try again.');
+      console.error('Failed to send friend request: ' + error.message);
     }
+  };
+
+  const checkIfFriends = async (user1Id, user2Id) => {
+    const friendsDocRef = doc(db, 'friends', user1Id);
+    const docSnapshot = await getDoc(friendsDocRef);
+    if (docSnapshot.exists()) {
+      return docSnapshot.data().userFriends && docSnapshot.data().userFriends[user2Id];
+    }
+    return false; 
   };
 
   const closeModal = () => {
