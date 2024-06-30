@@ -116,13 +116,38 @@ export default function ChatScreen({ route, navigation }) {
   };
 
   const handleSendMessage = async () => {
-    if (newMessage.trim() === '') return;
+    if (newMessage.trim() === '' && !image) return;
+
     const messagesRef = collection(db, 'chats', chatId, 'messages');
-    await addDoc(messagesRef, {
-      text: newMessage,
+    const messageData = {
       sender: user.uid,
       timestamp: new Date(),
-    });
+    };
+
+    if (newMessage.trim() !== '') {
+      messageData.text = newMessage;
+    }
+
+    if (image) {
+      setUploading(true);
+      try {
+        const storage = getStorage();
+        const storageRef = ref(storage, `images/${Date.now()}_${user.uid}.jpg`);
+        const response = await fetch(image.uri);
+        const blob = await response.blob();
+
+        await uploadBytes(storageRef, blob);
+        const downloadURL = await getDownloadURL(storageRef);
+        messageData.imageUrl = downloadURL;
+        setImage(null);
+      } catch (error) {
+        console.error("Error uploading image: ", error);
+      } finally {
+        setUploading(false);
+      }
+    }
+
+    await addDoc(messagesRef, messageData);
     setNewMessage('');
   };
 
@@ -145,35 +170,6 @@ export default function ChatScreen({ route, navigation }) {
       }
     } catch (error) {
       console.error("Error selecting image: ", error);
-    }
-  };
-
-  const handleSendImage = async () => {
-    if (!image) return;
-
-    setUploading(true); // Set uploading state to true
-
-    try {
-      const storage = getStorage();
-      const storageRef = ref(storage, `images/${Date.now()}_${user.uid}.jpg`);
-      const response = await fetch(image.uri);
-      const blob = await response.blob();
-
-      await uploadBytes(storageRef, blob);
-      const downloadURL = await getDownloadURL(storageRef);
-
-      const messagesRef = collection(db, 'chats', chatId, 'messages');
-      await addDoc(messagesRef, {
-        imageUrl: downloadURL,
-        sender: user.uid,
-        timestamp: new Date(),
-      });
-
-      setImage(null);
-    } catch (error) {
-      console.error("Error uploading image: ", error);
-    } finally {
-      setUploading(false); // Set uploading state to false
     }
   };
 
@@ -224,15 +220,18 @@ export default function ChatScreen({ route, navigation }) {
             }
           }}
         />
+        {image && (
+          <View style={styles.imagePreviewContainer}>
+            <Image source={{ uri: image.uri }} style={styles.imagePreview} />
+            <Pressable onPress={() => setImage(null)} style={styles.removeImageButton}>
+              <Text style={styles.removeImageButtonText}>Remove</Text>
+            </Pressable>
+          </View>
+        )}
         <View style={styles.inputContainer}>
-        <Pressable style={styles.imageButton} onPress={handleSelectImage}>
+          <Pressable style={styles.imageButton} onPress={handleSelectImage}>
             <Text style={styles.imageButtonText}>🖼️</Text>
           </Pressable>
-          {image && (
-            <Pressable style={styles.sendButton} onPress={handleSendImage}>
-              <Text style={styles.sendButtonText}>Send Image</Text>
-            </Pressable>
-          )}
           <TextInput
             style={styles.input}
             value={newMessage}
@@ -240,11 +239,9 @@ export default function ChatScreen({ route, navigation }) {
             placeholder="Type a message"
             placeholderTextColor="#aaa"
           />
-          
           <Pressable style={styles.sendButton} onPress={handleSendMessage}>
             <Text style={styles.sendButtonText}>Send</Text>
           </Pressable>
-          
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -252,13 +249,13 @@ export default function ChatScreen({ route, navigation }) {
 }
 
 const styles = StyleSheet.create({
-  // ... other styles ...
   newChatButton: {
     position: 'absolute',
     right: 0,
     top: -5,
     padding: 10,
-    backgroundColor: 'white', // Just as an example
+    backgroundColor: 'white', 
+    borderRadius: 25,
   },
   newChatButtonText: {
     color: '#000', // Adjust color to make it visible
@@ -366,5 +363,25 @@ const styles = StyleSheet.create({
     width: 200,
     height: 200,
     borderRadius: 10,
+  },
+  imagePreviewContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  imagePreview: {
+    width: 100,
+    height: 100,
+    borderRadius: 10,
+    marginRight: 10,
+  },
+  removeImageButton: {
+    backgroundColor: '#ff4444',
+    padding: 10,
+    borderRadius: 5,
+  },
+  removeImageButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
   },
 });
