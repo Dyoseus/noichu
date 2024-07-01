@@ -84,7 +84,7 @@ export default function FriendsListScreen({ refresh, onFriendRemoved }) {
     if (!selectedFriend) return;
 
     try {
-      // Remove friend relationship
+      // Removes friend relationship
       await deleteDoc(doc(db, 'friends', `${currentUser.uid}_${selectedFriend.id}`));
 
       setFriends(friends.filter(friend => friend.id !== selectedFriend.id));
@@ -92,7 +92,7 @@ export default function FriendsListScreen({ refresh, onFriendRemoved }) {
       setSelectedFriend(null);
       alert('Friend removed successfully');
       if (typeof onFriendRemoved === 'function') {
-        onFriendRemoved(); // Call the callback to indicate a friend was removed
+        onFriendRemoved(); // Calls the callback to indicate a friend was removed
       }
     } catch (error) {
       alert('Failed to remove friend: ' + error.message);
