@@ -55,7 +55,7 @@ export default function ChatScreen({ route, navigation }) {
   const user = auth.currentUser;
   const [image, setImage] = useState(null);
   const [uploading, setUploading] = useState(false); // Track uploading state
-  const [profilePic, setProfilePic] = useState(null);
+  const [friendProfilePic, setFriendProfilePic] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -69,14 +69,15 @@ export default function ChatScreen({ route, navigation }) {
   }, []);
 
   useEffect(() => {
-    const fetchFriendName = async () => {
+    const fetchFriendData = async () => {
       const friendDoc = await getDoc(doc(db, 'users', friendId));
       if (friendDoc.exists()) {
         setFriendName(friendDoc.data().username);
+        setFriendProfilePic(friendDoc.data().profilePic);
       }
     };
 
-    fetchFriendName();
+    fetchFriendData();
     const messagesRef = collection(db, 'chats', chatId, 'messages');
     const q = query(messagesRef, orderBy('timestamp', 'desc'));
 
@@ -188,20 +189,6 @@ export default function ChatScreen({ route, navigation }) {
     return unsubscribe;
   }, [chatId, navigation, route.params.friendId, user.uid]);
 
-  useEffect(() => {
-    const fetchUserData = async () => {
-      const user = auth.currentUser;
-      if (user) {
-        const userDoc = await getDoc(doc(db, 'users', user.uid));
-        if (userDoc.exists()) {
-          setProfilePic(userDoc.data().profilePic);
-        }
-      }
-    };
-
-    fetchUserData();
-  }, []);
-
   return (
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 5 : 20}>
@@ -209,8 +196,8 @@ export default function ChatScreen({ route, navigation }) {
           <Pressable onPress={handleLeaveChat} style={styles.leaveButton}>
             <Image source={require('../assets/arrow.png')} style={styles.leaveImage} />
           </Pressable>
-          {profilePic && <Image source={{ uri: profilePic }} style={styles.profilePic} />}
-          <Text style={styles.title}>Chat with {friendName}</Text>
+          {friendProfilePic && <Image source={{ uri: friendProfilePic }} style={styles.profilePic} />}
+          <Text style={styles.title}>{friendName}</Text>
           <Pressable onPress={handleFindNewChat} style={styles.newChatButton}>
             <Text style={styles.newChatButtonText}>New Chat</Text>
           </Pressable>
@@ -308,10 +295,10 @@ const styles = StyleSheet.create({
     color: '#ff4444',
   },
   profilePic: {
-    width: 50,
-    height: 50,
+    width: 40,
+    height: 40,
     borderRadius: 25,
-    marginRight: 20,
+    marginRight: 10,
   },
   inputContainer: {
     flexDirection: 'row',

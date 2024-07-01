@@ -45,22 +45,28 @@ export default function ProfileScreen({ navigation }) {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [4, 3],
-      quality: 1,
+      quality: 0.2,
     });
 
-    if (result.cancelled) {
-        console.log("Image picker was cancelled");
-        return;  // Early return if the picker is cancelled
+    if (result.canceled) {
+      console.log("Image picker was cancelled");
+      return;
     }
 
-    if (!result.uri) {
-        console.error("No image URI available");
-        alert("No image URI available");
-        return;  // Early return if no URI is found
+    if (!result.assets || result.assets.length === 0) {
+      console.error("No image selected");
+      alert("No image selected");
+      return;
+    }
+
+    const imageUri = result.assets[0].uri;
+    if (!imageUri) {
+      console.error("No image URI available");
+      alert("No image URI available");
+      return;
     }
 
     setUploading(true);
-    const imageUri = result.uri;
     const fileName = imageUri.split('/').pop();
 
     // Check if fileName is defined
@@ -102,13 +108,15 @@ export default function ProfileScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      {profilePic ? (
-        <Image source={{ uri: profilePic }} style={styles.profileImage} />
-      ) : (
-        <Pressable style={styles.imagePlaceholder} onPress={handleSelectImage}>
-          <Text style={styles.imagePlaceholderText}>Select Image</Text>
-        </Pressable>
-      )}
+      <Pressable onPress={handleSelectImage}>
+        {profilePic ? (
+          <Image source={{ uri: profilePic }} style={styles.profileImage} />
+        ) : (
+          <View style={styles.imagePlaceholder}>
+            <Text style={styles.imagePlaceholderText}>Select Image</Text>
+          </View>
+        )}
+      </Pressable>
       <Text style={styles.username}>{username ? `Welcome, ${username}` : 'Loading...'}</Text>
       {uploading && <Text>Uploading...</Text>}
       <Pressable style={styles.logoutButton} onPress={handleLogout}>
