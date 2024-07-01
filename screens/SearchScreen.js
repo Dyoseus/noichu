@@ -145,7 +145,7 @@ export default function SearchScreen() {
     let currentUserFriends = new Set();
   
     try {
-      // Fetch current user's friends
+      // Fetch current users friends
       let q = query(friendsRef, where('user1', '==', currentUserUid), where('status', '==', 'accepted'));
       let friendsSnapshot = await getDocs(q);
       friendsSnapshot.forEach(doc => currentUserFriends.add(doc.data().user2));

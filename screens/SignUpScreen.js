@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, TextInput, StyleSheet, TouchableOpacity, Text } from 'react-native';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 import { getFirestore, doc, setDoc } from 'firebase/firestore';
-import { app, db } from '../firebaseConfig'; // Make sure you are importing the initialized Firebase app
+import { app, db } from '../firebaseConfig'; 
 
 const auth = getAuth(app);
 
@@ -34,21 +34,21 @@ export default function SignUpScreen({ navigation }) {
       <TextInput
         style={styles.input}
         placeholder="Username"
-        placeholderTextColor="#e0e0e0" // Set placeholder text color to white
+        placeholderTextColor="#e0e0e0" 
         value={username}
         onChangeText={setUsername}
       />
       <TextInput
         style={styles.input}
         placeholder="Email"
-        placeholderTextColor="#e0e0e0" // Set placeholder text color to white
+        placeholderTextColor="#e0e0e0" 
         value={email}
         onChangeText={setEmail}
       />
       <TextInput
         style={styles.input}
         placeholder="Password"
-        placeholderTextColor="#e0e0e0" // Set placeholder text color to white
+        placeholderTextColor="#e0e0e0" 
         value={password}
         onChangeText={setPassword}
         secureTextEntry
@@ -68,7 +68,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     padding: 16,
-    backgroundColor: '#232323', // Set a background color for the container
+    backgroundColor: '#232323', 
   },
   input: {
     height: 40,
@@ -77,7 +77,7 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     marginBottom: 12,
     paddingHorizontal: 8,
-    color: 'white', // Set text color to white
+    color: 'white', 
   },
   loginButton: {
     backgroundColor: '#2f4f4f',
@@ -93,7 +93,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   buttonText: {
-    color: 'white', // Set text color for buttons
+    color: 'white', 
     fontWeight: 'bold',
   },
 });

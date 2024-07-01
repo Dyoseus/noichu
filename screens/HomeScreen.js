@@ -13,7 +13,7 @@ const db = getFirestore(app);
 export default function HomeScreen({ navigation, route }) {
   const [username, setUsername] = useState('');
   const [inQueue, setInQueue] = useState(false);
-  const [chatMode, setChatMode] = useState('friends'); // 'friends' or 'friendsOfFriends'
+  const [chatMode, setChatMode] = useState('friends'); // 'friends' or 'Everyone'
   const queueTimeoutRef = useRef(null);
 
   useEffect(() => {
@@ -115,11 +115,11 @@ export default function HomeScreen({ navigation, route }) {
         // Set a timeout to stop listening for a pair after a certain time
         queueTimeoutRef.current = setTimeout(async () => {
           console.log('Timeout reached, no match found');
-          unsubscribe(); // Stop listening for changes
-          await leaveQueue(user.uid); // Remove user from the queue
+          unsubscribe(); // Stops listening for changes
+          await leaveQueue(user.uid); // Removes user from the queue
           setInQueue(false);
           alert('No pair found. Please try again later.');
-        }, 5000); // Adjust timeout as needed
+        }, 5000); // Timeout can be adjusted
       }
     } catch (error) {
       console.error('Error joining queue: ', error);
