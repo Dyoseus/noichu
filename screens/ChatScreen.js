@@ -55,6 +55,7 @@ export default function ChatScreen({ route, navigation }) {
   const user = auth.currentUser;
   const [image, setImage] = useState(null);
   const [uploading, setUploading] = useState(false); // Track uploading state
+  const [profilePic, setProfilePic] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -187,6 +188,20 @@ export default function ChatScreen({ route, navigation }) {
     return unsubscribe;
   }, [chatId, navigation, route.params.friendId, user.uid]);
 
+  useEffect(() => {
+    const fetchUserData = async () => {
+      const user = auth.currentUser;
+      if (user) {
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        if (userDoc.exists()) {
+          setProfilePic(userDoc.data().profilePic);
+        }
+      }
+    };
+
+    fetchUserData();
+  }, []);
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 5 : 20}>
@@ -194,6 +209,7 @@ export default function ChatScreen({ route, navigation }) {
           <Pressable onPress={handleLeaveChat} style={styles.leaveButton}>
             <Image source={require('../assets/arrow.png')} style={styles.leaveImage} />
           </Pressable>
+          {profilePic && <Image source={{ uri: profilePic }} style={styles.profilePic} />}
           <Text style={styles.title}>Chat with {friendName}</Text>
           <Pressable onPress={handleFindNewChat} style={styles.newChatButton}>
             <Text style={styles.newChatButtonText}>New Chat</Text>
@@ -258,12 +274,12 @@ const styles = StyleSheet.create({
     borderRadius: 25,
   },
   newChatButtonText: {
-    color: '#000', // Adjust color to make it visible
+    color: '#000', // Adjusted color to make it visible
     fontWeight: 'bold',
   },
   safeArea: {
     flex: 1,
-    paddingTop: Platform.OS === 'android' ? 25 : 0, // Adjust top padding for Android notch
+    paddingTop: Platform.OS === 'android' ? 25 : 0, // Adjusted top padding for Android notch
     backgroundColor: '#232323',
   },
   container: {
@@ -280,7 +296,7 @@ const styles = StyleSheet.create({
   leaveButton: {
     position: 'absolute',
     left: 10,
-    top: 1, // Adjust for better accessibility
+    top: 1, // Adjusted for better accessibility
   },
   leaveImage: {
     width: 25,
@@ -290,6 +306,12 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     color: '#ff4444',
+  },
+  profilePic: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    marginRight: 20,
   },
   inputContainer: {
     flexDirection: 'row',

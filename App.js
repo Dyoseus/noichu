@@ -35,15 +35,15 @@ function SearchTabNavigator() {
   const [refreshRequests, setRefreshRequests] = useState(false);
 
   const handleFriendAccepted = () => {
-    setRefreshFriends(!refreshFriends); // Toggle refreshFriends state
+    setRefreshFriends(!refreshFriends); 
   };
 
   const handleRequestReceived = () => {
-    setRefreshRequests(!refreshRequests); // Toggle refreshRequests state
+    setRefreshRequests(!refreshRequests); 
   };
 
   const handleFriendRemoved = () => {
-    setRefreshFriends(!refreshFriends); // Toggle refreshFriends state
+    setRefreshFriends(!refreshFriends); 
   };
 
   return (

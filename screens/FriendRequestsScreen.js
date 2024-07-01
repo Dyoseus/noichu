@@ -64,18 +64,18 @@ export default function FriendRequestsScreen({ refresh, onFriendAccepted }) {
       const requestDocRef = doc(db, 'friendRequests', request.id);
       await updateDoc(requestDocRef, { status: 'accepted' });
 
-      // Create friend relationship in both directions (using new friends collection structure)
+      // Creates friend relationship in both directions (using new friends collection structure)
       await setDoc(doc(db, 'friends', `${currentUser.uid}_${request.from}`), {
         user1: currentUser.uid,
         user2: request.from,
         timestamp: new Date(),
-        status: 'accepted', // Or any other status you want to use
+        status: 'accepted', 
       });
 
       setRequests(requests.filter(req => req.id !== request.id));
       alert('Friend request accepted');
       if (typeof onFriendAccepted === 'function') {
-        onFriendAccepted(); // Call the callback to indicate a friend was accepted
+        onFriendAccepted(); // Call on the callback to indicate a friend was accepted
       }
     } catch (error) {
       alert('Failed to accept friend request: ' + error.message);
