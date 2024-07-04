@@ -19,44 +19,35 @@ export default function VideoCallScreen() {
   const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
-    // Initialize PeerConnection
-    const initializePeerConnection = async () => {
-      try {
-        const pc = new RTCPeerConnection(configuration);
-        setPeerConnection(pc);
-
-        // Setup local media stream
-        const stream = await mediaDevices.getUserMedia({ video: true, audio: true });
-        setLocalStream(stream);
-        stream.getTracks().forEach(track => {
-          pc.addTrack(track, stream);
-        });
-
-        // Setup listener for remote stream
-        pc.ontrack = event => {
-          setRemoteStream(event.streams[0]);
-        };
-
-        // Setup ICE candidate handling
-        pc.onicecandidate = handleICECandidate;
-
-        // Cleanup function
-        return () => {
-          if (pc) {
-            pc.close();
-          }
-          if (stream) {
-            stream.getTracks().forEach(track => track.stop());
-          }
-        };
-      } catch (err) {
-        console.error('Error initializing PeerConnection:', err);
-        setErrorMessage(`Failed to initialize: ${err.message}`);
-      }
-    };
-
     initializePeerConnection();
   }, []);
+
+  const initializePeerConnection = async () => {
+    try {
+      const pc = new RTCPeerConnection(configuration);
+      setPeerConnection(pc);
+      const stream = await setupLocalStream(pc);
+      setLocalStream(stream);
+      setupRemoteStreamListener(pc);
+      setupICECandidateListener(pc);
+    } catch (err) {
+      handleError('Error initializing PeerConnection:', err);
+    }
+  };
+
+  const setupLocalStream = async (pc) => {
+    const stream = await mediaDevices.getUserMedia({ video: true, audio: true });
+    stream.getTracks().forEach(track => pc.addTrack(track, stream));
+    return stream;
+  };
+
+  const setupRemoteStreamListener = (pc) => {
+    pc.ontrack = event => setRemoteStream(event.streams[0]);
+  };
+
+  const setupICECandidateListener = (pc) => {
+    pc.onicecandidate = handleICECandidate;
+  };
 
   const handleICECandidate = (event) => {
     if (event.candidate) {
@@ -70,8 +61,7 @@ export default function VideoCallScreen() {
         const id = await createOffer();
         setCallId(id);
       } catch (error) {
-        console.error('Error starting call:', error);
-        setErrorMessage(`Failed to start call: ${error.message}`);
+        handleError('Error starting call:', error);
       }
     } else {
       setErrorMessage('PeerConnection not initialized');
@@ -86,10 +76,9 @@ export default function VideoCallScreen() {
 
     try {
       await answerCall(callId);
-      setErrorMessage(''); // Clear any previous error messages
+      setErrorMessage('');
     } catch (error) {
-      console.error('Error joining call:', error);
-      setErrorMessage(`Failed to join call: ${error.message}`);
+      handleError('Error joining call:', error);
     }
   };
 
@@ -162,7 +151,6 @@ export default function VideoCallScreen() {
 
       const offerDescription = new RTCSessionDescription(callData.offer);
       
-      // Check the connection state before setting remote description
       if (peerConnection.signalingState !== "stable") {
         console.log("Peer connection is not in stable state. Resetting...");
         await peerConnection.setLocalDescription({type: "rollback"});
@@ -189,42 +177,46 @@ export default function VideoCallScreen() {
       });
 
     } catch (error) {
-      console.error('Error answering call:', error);
-      setErrorMessage(`Failed to join call: ${error.message}`);
+      handleError('Error answering call:', error);
     }
   };
 
+  const handleError = (message, error) => {
+    console.error(message, error);
+    setErrorMessage(`${message} ${error.message}`);
+  };
+
   return (
-      <View style={styles.container}>
-          {localStream && <RTCView streamURL={localStream.toURL()} style={styles.video} />}
-          {remoteStream && <RTCView streamURL={remoteStream.toURL()} style={styles.video} />}
-          <TextInput style={styles.input} placeholder="Enter Call ID" value={callId} onChangeText={setCallId} />
-          <Button title="Start Call" onPress={handleStartCall} />
-          <Button title="Join Call" onPress={handleJoinCall} />
-          {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
-      </View>
+    <View style={styles.container}>
+      {localStream && <RTCView streamURL={localStream.toURL()} style={styles.video} />}
+      {remoteStream && <RTCView streamURL={remoteStream.toURL()} style={styles.video} />}
+      <TextInput style={styles.input} placeholder="Enter Call ID" value={callId} onChangeText={setCallId} />
+      <Button title="Start Call" onPress={handleStartCall} />
+      <Button title="Join Call" onPress={handleJoinCall} />
+      {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-      padding: 10,
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 10,
   },
   video: {
-      width: '100%',
-      height: 300,
-      backgroundColor: 'black',
+    width: '100%',
+    height: 300,
+    backgroundColor: 'black',
   },
   input: {
-      width: '90%',
-      height: 40,
-      borderColor: 'gray',
-      borderWidth: 1,
-      marginTop: 20,
-      padding: 10,
+    width: '90%',
+    height: 40,
+    borderColor: 'gray',
+    borderWidth: 1,
+    marginTop: 20,
+    padding: 10,
   },
   errorText: {
     color: 'red',
