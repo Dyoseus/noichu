@@ -1,10 +1,10 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, Animated, Button, TextInput } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Animated, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getAuth, signOut } from 'firebase/auth';
 import { app } from '../firebaseConfig';
 import { RTCPeerConnection, RTCIceCandidate, RTCSessionDescription } from 'react-native-webrtc';
-import { getFirestore, doc, setDoc, getDoc, onSnapshot, addDoc, collection, updateDoc } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, getDoc, onSnapshot, addDoc, collection, updateDoc, query, where, getDocs, deleteDoc } from 'firebase/firestore';
 import { RTCView } from 'react-native-webrtc';
 import { mediaDevices } from 'react-native-webrtc';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -14,14 +14,20 @@ const configuration = {"iceServers": [{"urls": "stun:stun.l.google.com:19302"}]}
 export default function VideoCallScreen() {
   const [localStream, setLocalStream] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
-  const [callId, setCallId] = useState('');
   const [peerConnection, setPeerConnection] = useState(null);
   const [errorMessage, setErrorMessage] = useState('');
+  const [userId, setUserId] = useState('');
 
   useEffect(() => {
     initializePeerConnection();
+    const auth = getAuth();
+    const user = auth.currentUser;
+    if (user) {
+      setUserId(user.uid);
+    }
   }, []);
 
+  // Initialize the peer connection and set up local and remote streams
   const initializePeerConnection = async () => {
     try {
       const pc = new RTCPeerConnection(configuration);
@@ -30,86 +36,96 @@ export default function VideoCallScreen() {
       setLocalStream(stream);
       setupRemoteStreamListener(pc);
       setupICECandidateListener(pc);
+      return pc;
     } catch (err) {
       handleError('Error initializing PeerConnection:', err);
     }
   };
 
+  // Set up the local media stream (video and audio) and add tracks to the peer connection
   const setupLocalStream = async (pc) => {
     const stream = await mediaDevices.getUserMedia({ video: true, audio: true });
     stream.getTracks().forEach(track => pc.addTrack(track, stream));
     return stream;
   };
 
+  // Listen for remote media streams and set the remote stream state
   const setupRemoteStreamListener = (pc) => {
     pc.ontrack = event => setRemoteStream(event.streams[0]);
   };
 
+  // Listen for ICE candidates and handle them
   const setupICECandidateListener = (pc) => {
     pc.onicecandidate = handleICECandidate;
   };
 
+  // Handle new ICE candidates
   const handleICECandidate = (event) => {
     if (event.candidate) {
       console.log('New ICE candidate:', event.candidate);
     }
   };
 
-  const handleStartCall = async () => {
-    if (peerConnection) {
-      try {
-        const id = await createOffer();
-        setCallId(id);
-      } catch (error) {
-        handleError('Error starting call:', error);
-      }
-    } else {
-      setErrorMessage('PeerConnection not initialized');
-    }
-  };
-
+  // Join a random call by either creating an offer or answering an existing one
   const handleJoinCall = async () => {
-    if (!peerConnection) {
+    const pc = await initializePeerConnection();
+    if (!pc) {
       setErrorMessage('PeerConnection not initialized');
       return;
     }
 
     try {
-      await answerCall(callId);
+      const db = getFirestore();
+      const queueRef = collection(db, 'queue');
+      const q = query(queueRef, where('status', '==', 'waiting'));
+      const querySnapshot = await getDocs(q);
+
+      if (querySnapshot.empty) {
+        // No waiting users, create a new call
+        const callDoc = await addDoc(queueRef, { userId, status: 'waiting' });
+        await createOffer(callDoc.id, pc);
+      } else {
+        // Join an existing call
+        const callDoc = querySnapshot.docs[0];
+        await answerCall(callDoc.id, pc);
+        await updateDoc(callDoc.ref, { status: 'connected' });
+      }
+
       setErrorMessage('');
     } catch (error) {
       handleError('Error joining call:', error);
     }
   };
 
-  const createOffer = async () => {
+  // Create an offer and set up the call document in Firestore
+  const createOffer = async (callId, pc) => {
     const db = getFirestore();
-    const callDoc = doc(collection(db, 'calls'));
+    const callDoc = doc(db, 'queue', callId);
     const offerCandidates = collection(callDoc, 'offerCandidates');
     const answerCandidates = collection(callDoc, 'answerCandidates');
 
-    peerConnection.onicecandidate = event => {
+    pc.onicecandidate = event => {
       if (event.candidate) {
         addDoc(offerCandidates, event.candidate.toJSON());
       }
     };
 
-    const offerDescription = await peerConnection.createOffer();
-    await peerConnection.setLocalDescription(offerDescription);
+    const offerDescription = await pc.createOffer();
+    await pc.setLocalDescription(offerDescription);
 
     const offer = {
       sdp: offerDescription.sdp,
       type: offerDescription.type,
     };
 
-    await setDoc(callDoc, { offer });
+    await updateDoc(callDoc, { offer });
 
     onSnapshot(callDoc, (snapshot) => {
       const data = snapshot.data();
-      if (!peerConnection.currentRemoteDescription && data?.answer) {
+      if (!pc.currentRemoteDescription && data?.answer) {
         const answerDescription = new RTCSessionDescription(data.answer);
-        if (peerConnection.signalingState === "have-local-offer") {
-          peerConnection.setRemoteDescription(answerDescription);
+        if (pc.signalingState === "have-local-offer") {
+          pc.setRemoteDescription(answerDescription);
         }
       }
     });
@@ -118,7 +134,7 @@ export default function VideoCallScreen() {
       snapshot.docChanges().forEach(change => {
         if (change.type === 'added') {
           const candidate = new RTCIceCandidate(change.doc.data());
-          peerConnection.addIceCandidate(candidate);
+          pc.addIceCandidate(candidate);
         }
       });
     });
@@ -126,13 +142,14 @@ export default function VideoCallScreen() {
     return callDoc.id;
   };
 
-  const answerCall = async (callId) => {
+  // Answer an existing call by setting the remote description and creating an answer
+  const answerCall = async (callId, pc) => {
     const db = getFirestore();
-    const callDoc = doc(db, 'calls', callId);
+    const callDoc = doc(db, 'queue', callId);
     const offerCandidates = collection(callDoc, 'offerCandidates');
     const answerCandidates = collection(callDoc, 'answerCandidates');
 
-    peerConnection.onicecandidate = event => {
+    pc.onicecandidate = event => {
       if (event.candidate) {
         addDoc(answerCandidates, event.candidate.toJSON());
       }
@@ -151,14 +168,14 @@ export default function VideoCallScreen() {
 
       const offerDescription = new RTCSessionDescription(callData.offer);
       
-      if (peerConnection.signalingState !== "stable") {
+      if (pc.signalingState !== "stable") {
         console.log("Peer connection is not in stable state. Resetting...");
-        await peerConnection.setLocalDescription({type: "rollback"});
+        await pc.setLocalDescription({type: "rollback"});
       }
 
-      await peerConnection.setRemoteDescription(offerDescription);
-      const answerDescription = await peerConnection.createAnswer();
-      await peerConnection.setLocalDescription(answerDescription);
+      await pc.setRemoteDescription(offerDescription);
+      const answerDescription = await pc.createAnswer();
+      await pc.setLocalDescription(answerDescription);
 
       const answer = {
         type: answerDescription.type,
@@ -171,13 +188,23 @@ export default function VideoCallScreen() {
         snapshot.docChanges().forEach(change => {
           if (change.type === 'added') {
             const candidate = new RTCIceCandidate(change.doc.data());
-            peerConnection.addIceCandidate(candidate);
+            pc.addIceCandidate(candidate);
           }
         });
       });
 
     } catch (error) {
       handleError('Error answering call:', error);
+    }
+  };
+
+  const handleLeaveCall = async () => {
+    if (peerConnection) {
+      await peerConnection.close();
+      setPeerConnection(null);
+      setLocalStream(null);
+      setRemoteStream(null);
+      setErrorMessage('');
     }
   };
 
@@ -190,9 +217,12 @@ export default function VideoCallScreen() {
     <View style={styles.container}>
       {localStream && <RTCView streamURL={localStream.toURL()} style={styles.video} />}
       {remoteStream && <RTCView streamURL={remoteStream.toURL()} style={styles.video} />}
-      <TextInput style={styles.input} placeholder="Enter Call ID" value={callId} onChangeText={setCallId} />
-      <Button title="Start Call" onPress={handleStartCall} />
-      <Button title="Join Call" onPress={handleJoinCall} />
+      <Pressable style={[styles.button, styles.joinButton]} onPress={handleJoinCall}>
+        <Text style={styles.buttonText}>Join Call</Text>
+      </Pressable>
+      <Pressable style={[styles.button, styles.leaveButton]} onPress={handleLeaveCall}>
+        <Text style={styles.buttonText}>Leave Call</Text>
+      </Pressable>
       {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
     </View>
   );
@@ -210,16 +240,26 @@ const styles = StyleSheet.create({
     height: 300,
     backgroundColor: 'black',
   },
-  input: {
-    width: '90%',
-    height: 40,
-    borderColor: 'gray',
-    borderWidth: 1,
-    marginTop: 20,
-    padding: 10,
-  },
   errorText: {
     color: 'red',
     marginTop: 10,
+  },
+  button: {
+    width: '90%',
+    height: 40,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  joinButton: {
+    backgroundColor: 'green',
+  },
+  leaveButton: {
+    backgroundColor: 'red',
+  },
+  buttonText: {
+    color: 'white',
+    fontSize: 18,
   },
 });
