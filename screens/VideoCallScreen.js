@@ -1,31 +1,174 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, Animated } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Animated,Button, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getAuth, signOut } from 'firebase/auth';
-import { getFirestore, collection, addDoc, deleteDoc, query, where, getDocs, doc, setDoc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
 import { app } from '../firebaseConfig';
+import { RTCPeerConnection, RTCIceCandidate, RTCSessionDescription } from 'react-native-webrtc';
+import { getFirestore, doc, setDoc, getDoc, onSnapshot, addDoc, collection, updateDoc } from 'firebase/firestore';
+import { RTCView } from 'react-native-webrtc';
+import { mediaDevices } from 'react-native-webrtc';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const configuration = {"iceServers": [{"urls": "stun:stun.l.google.com:19302"}]};
 
 export default function VideoCallScreen() {
+  const [localStream, setLocalStream] = useState(null);
+  const [remoteStream, setRemoteStream] = useState(null);
+  const [callId, setCallId] = useState('');
+  const [peerConnection, setPeerConnection] = useState(null);
+
+  useEffect(() => {
+    const pc = new RTCPeerConnection(configuration);
+    setPeerConnection(pc);
+
+    // Setup local media stream
+    const startMedia = async () => {
+      try {
+        const stream = await mediaDevices.getUserMedia({ video: true, audio: true });
+        setLocalStream(stream);
+        stream.getTracks().forEach(track => {
+          pc.addTrack(track, stream);
+        });
+
+        // Setup listener for remote stream
+        pc.ontrack = event => {
+          setRemoteStream(event.streams[0]);
+        };
+      } catch (err) {
+        console.error('Error setting up media:', err);
+      }
+    };
+
+    startMedia();
+
+    // Cleanup function
+    return () => {
+      if (pc) {
+        pc.close();
+      }
+    };
+  }, []);
+
+  const handleStartCall = async () => {
+    if (peerConnection) {
+      const id = await createOffer();
+      setCallId(id);
+    }
+  };
+
+  const handleJoinCall = async () => {
+    if (peerConnection) {
+      await answerCall(callId);
+    }
+  };
+
+  const createOffer = async () => {
+    const db = getFirestore();
+    const callDoc = doc(collection(db, 'calls'));
+    const offerCandidates = collection(callDoc, 'offerCandidates');
+    const answerCandidates = collection(callDoc, 'answerCandidates');
+
+    peerConnection.onicecandidate = event => {
+      if (event.candidate) {
+        addDoc(offerCandidates, event.candidate.toJSON());
+      }
+    };
+
+    const offerDescription = await peerConnection.createOffer();
+    await peerConnection.setLocalDescription(offerDescription);
+
+    const offer = {
+      sdp: offerDescription.sdp,
+      type: offerDescription.type,
+    };
+
+    await setDoc(callDoc, { offer });
+
+    onSnapshot(callDoc, (snapshot) => {
+      const data = snapshot.data();
+      if (!peerConnection.currentRemoteDescription && data?.answer) {
+        const answerDescription = new RTCSessionDescription(data.answer);
+        peerConnection.setRemoteDescription(answerDescription);
+      }
+    });
+
+    onSnapshot(answerCandidates, snapshot => {
+      snapshot.docChanges().forEach(change => {
+        if (change.type === 'added') {
+          const candidate = new RTCIceCandidate(change.doc.data());
+          peerConnection.addIceCandidate(candidate);
+        }
+      });
+    });
+
+    return callDoc.id;
+  };
+
+  const answerCall = async (callId) => {
+    const db = getFirestore();
+    const callDoc = doc(db, 'calls', callId);
+    const offerCandidates = collection(callDoc, 'offerCandidates');
+    const answerCandidates = collection(callDoc, 'answerCandidates');
+
+    peerConnection.onicecandidate = event => {
+      if (event.candidate) {
+        addDoc(answerCandidates, event.candidate.toJSON());
+      }
+    };
+
+    const callData = (await getDoc(callDoc)).data();
+    const offerDescription = new RTCSessionDescription(callData.offer);
+    await peerConnection.setRemoteDescription(offerDescription);
+
+    const answerDescription = await peerConnection.createAnswer();
+    await peerConnection.setLocalDescription(answerDescription);
+
+    const answer = {
+      type: answerDescription.type,
+      sdp: answerDescription.sdp,
+    };
+
+    await updateDoc(callDoc, { answer });
+
+    onSnapshot(offerCandidates, snapshot => {
+      snapshot.docChanges().forEach(change => {
+        if (change.type === 'added') {
+          const candidate = new RTCIceCandidate(change.doc.data());
+          peerConnection.addIceCandidate(candidate);
+        }
+      });
+    });
+  };
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.text}>Video Call Screen</Text>
-      <Pressable onPress={() => console.log('Start call')}>
-        <Text>Test</Text>
-      </Pressable>
-    </View>
+      <View style={styles.container}>
+          {localStream && <RTCView streamURL={localStream.toURL()} style={styles.video} />}
+          {remoteStream && <RTCView streamURL={remoteStream.toURL()} style={styles.video} />}
+          <TextInput style={styles.input} placeholder="Enter Call ID" value={callId} onChangeText={setCallId} />
+          <Button title="Start Call" onPress={handleStartCall} />
+          <Button title="Join Call" onPress={handleJoinCall} />
+      </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#fff',
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 10,
   },
-  text: {
-    fontSize: 16,
-    marginBottom: 20,
+  video: {
+      width: '100%',
+      height: 300,
+      backgroundColor: 'black',
+  },
+  input: {
+      width: '90%',
+      height: 40,
+      borderColor: 'gray',
+      borderWidth: 1,
+      marginTop: 20,
+      padding: 10,
   },
 });
-
