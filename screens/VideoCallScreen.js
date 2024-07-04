@@ -84,11 +84,13 @@ export default function VideoCallScreen() {
         // No waiting users, create a new call
         const callDoc = await addDoc(queueRef, { userId, status: 'waiting' });
         await createOffer(callDoc.id, pc);
+        listenForCallEnd(callDoc.id); // Listen for call end
       } else {
         // Join an existing call
         const callDoc = querySnapshot.docs[0];
         await answerCall(callDoc.id, pc);
         await updateDoc(callDoc.ref, { status: 'connected' });
+        listenForCallEnd(callDoc.id); // Listen for call end
       }
 
       setErrorMessage('');
@@ -200,12 +202,35 @@ export default function VideoCallScreen() {
 
   const handleLeaveCall = async () => {
     if (peerConnection) {
+      const db = getFirestore();
+      const queueRef = collection(db, 'queue');
+      const q = query(queueRef, where('userId', '==', userId));
+      const querySnapshot = await getDocs(q);
+
+      if (!querySnapshot.empty) {
+        const callDoc = querySnapshot.docs[0];
+        await updateDoc(callDoc.ref, { status: 'ended' });
+        await deleteDoc(callDoc.ref);
+      }
+
       await peerConnection.close();
       setPeerConnection(null);
       setLocalStream(null);
       setRemoteStream(null);
       setErrorMessage('');
     }
+  };
+
+  const listenForCallEnd = (callId) => {
+    const db = getFirestore();
+    const callDoc = doc(db, 'queue', callId);
+
+    onSnapshot(callDoc, (snapshot) => {
+      const data = snapshot.data();
+      if (!snapshot.exists() || data?.status === 'ended') {
+        handleLeaveCall();
+      }
+    });
   };
 
   const handleError = (message, error) => {
@@ -215,8 +240,12 @@ export default function VideoCallScreen() {
 
   return (
     <View style={styles.container}>
-      {localStream && <RTCView streamURL={localStream.toURL()} style={styles.video} />}
-      {remoteStream && <RTCView streamURL={remoteStream.toURL()} style={styles.video} />}
+      {remoteStream && (
+        <RTCView streamURL={remoteStream.toURL()} style={styles.remoteVideo} />
+      )}
+      {localStream && (
+        <RTCView streamURL={localStream.toURL()} style={styles.localVideo} />
+      )}
       <Pressable style={[styles.button, styles.joinButton]} onPress={handleJoinCall}>
         <Text style={styles.buttonText}>Join Call</Text>
       </Pressable>
@@ -235,9 +264,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 10,
   },
-  video: {
-    width: '100%',
-    height: 300,
+  remoteVideo: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 10,
+  },
+  localVideo: {
+    position: 'absolute',
+    width: 100,
+    height: 150,
+    bottom: 10,
+    right: 10,
+    borderRadius: 10,
     backgroundColor: 'black',
   },
   errorText: {
