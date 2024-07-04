@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, Animated,Button, TextInput } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Animated, Button, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getAuth, signOut } from 'firebase/auth';
 import { app } from '../firebaseConfig';
@@ -16,14 +16,16 @@ export default function VideoCallScreen() {
   const [remoteStream, setRemoteStream] = useState(null);
   const [callId, setCallId] = useState('');
   const [peerConnection, setPeerConnection] = useState(null);
+  const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
-    const pc = new RTCPeerConnection(configuration);
-    setPeerConnection(pc);
-
-    // Setup local media stream
-    const startMedia = async () => {
+    // Initialize PeerConnection
+    const initializePeerConnection = async () => {
       try {
+        const pc = new RTCPeerConnection(configuration);
+        setPeerConnection(pc);
+
+        // Setup local media stream
         const stream = await mediaDevices.getUserMedia({ video: true, audio: true });
         setLocalStream(stream);
         stream.getTracks().forEach(track => {
@@ -34,31 +36,60 @@ export default function VideoCallScreen() {
         pc.ontrack = event => {
           setRemoteStream(event.streams[0]);
         };
+
+        // Setup ICE candidate handling
+        pc.onicecandidate = handleICECandidate;
+
+        // Cleanup function
+        return () => {
+          if (pc) {
+            pc.close();
+          }
+          if (stream) {
+            stream.getTracks().forEach(track => track.stop());
+          }
+        };
       } catch (err) {
-        console.error('Error setting up media:', err);
+        console.error('Error initializing PeerConnection:', err);
+        setErrorMessage(`Failed to initialize: ${err.message}`);
       }
     };
 
-    startMedia();
-
-    // Cleanup function
-    return () => {
-      if (pc) {
-        pc.close();
-      }
-    };
+    initializePeerConnection();
   }, []);
+
+  const handleICECandidate = (event) => {
+    if (event.candidate) {
+      console.log('New ICE candidate:', event.candidate);
+    }
+  };
 
   const handleStartCall = async () => {
     if (peerConnection) {
-      const id = await createOffer();
-      setCallId(id);
+      try {
+        const id = await createOffer();
+        setCallId(id);
+      } catch (error) {
+        console.error('Error starting call:', error);
+        setErrorMessage(`Failed to start call: ${error.message}`);
+      }
+    } else {
+      setErrorMessage('PeerConnection not initialized');
     }
   };
 
   const handleJoinCall = async () => {
-    if (peerConnection) {
+    if (!peerConnection) {
+      setErrorMessage('PeerConnection not initialized');
+      return;
+    }
+
+    try {
       await answerCall(callId);
+      setErrorMessage(''); // Clear any previous error messages
+    } catch (error) {
+      console.error('Error joining call:', error);
+      setErrorMessage(`Failed to join call: ${error.message}`);
     }
   };
 
@@ -88,7 +119,9 @@ export default function VideoCallScreen() {
       const data = snapshot.data();
       if (!peerConnection.currentRemoteDescription && data?.answer) {
         const answerDescription = new RTCSessionDescription(data.answer);
-        peerConnection.setRemoteDescription(answerDescription);
+        if (peerConnection.signalingState === "have-local-offer") {
+          peerConnection.setRemoteDescription(answerDescription);
+        }
       }
     });
 
@@ -116,28 +149,49 @@ export default function VideoCallScreen() {
       }
     };
 
-    const callData = (await getDoc(callDoc)).data();
-    const offerDescription = new RTCSessionDescription(callData.offer);
-    await peerConnection.setRemoteDescription(offerDescription);
+    try {
+      const callSnapshot = await getDoc(callDoc);
+      if (!callSnapshot.exists()) {
+        throw new Error('Call document does not exist');
+      }
 
-    const answerDescription = await peerConnection.createAnswer();
-    await peerConnection.setLocalDescription(answerDescription);
+      const callData = callSnapshot.data();
+      if (!callData.offer) {
+        throw new Error('Offer not found in call document');
+      }
 
-    const answer = {
-      type: answerDescription.type,
-      sdp: answerDescription.sdp,
-    };
+      const offerDescription = new RTCSessionDescription(callData.offer);
+      
+      // Check the connection state before setting remote description
+      if (peerConnection.signalingState !== "stable") {
+        console.log("Peer connection is not in stable state. Resetting...");
+        await peerConnection.setLocalDescription({type: "rollback"});
+      }
 
-    await updateDoc(callDoc, { answer });
+      await peerConnection.setRemoteDescription(offerDescription);
+      const answerDescription = await peerConnection.createAnswer();
+      await peerConnection.setLocalDescription(answerDescription);
 
-    onSnapshot(offerCandidates, snapshot => {
-      snapshot.docChanges().forEach(change => {
-        if (change.type === 'added') {
-          const candidate = new RTCIceCandidate(change.doc.data());
-          peerConnection.addIceCandidate(candidate);
-        }
+      const answer = {
+        type: answerDescription.type,
+        sdp: answerDescription.sdp,
+      };
+
+      await updateDoc(callDoc, { answer });
+
+      onSnapshot(offerCandidates, snapshot => {
+        snapshot.docChanges().forEach(change => {
+          if (change.type === 'added') {
+            const candidate = new RTCIceCandidate(change.doc.data());
+            peerConnection.addIceCandidate(candidate);
+          }
+        });
       });
-    });
+
+    } catch (error) {
+      console.error('Error answering call:', error);
+      setErrorMessage(`Failed to join call: ${error.message}`);
+    }
   };
 
   return (
@@ -147,6 +201,7 @@ export default function VideoCallScreen() {
           <TextInput style={styles.input} placeholder="Enter Call ID" value={callId} onChangeText={setCallId} />
           <Button title="Start Call" onPress={handleStartCall} />
           <Button title="Join Call" onPress={handleJoinCall} />
+          {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
       </View>
   );
 }
@@ -170,5 +225,9 @@ const styles = StyleSheet.create({
       borderWidth: 1,
       marginTop: 20,
       padding: 10,
+  },
+  errorText: {
+    color: 'red',
+    marginTop: 10,
   },
 });
