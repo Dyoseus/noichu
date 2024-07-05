@@ -18,10 +18,8 @@ export default function VideoCallScreen() {
   const [userId, setUserId] = useState('');
   const [inQueue, setInQueue] = useState(false);
   const [callDocId, setCallDocId] = useState(null);
-  const queueTimeoutRef = useRef(null);
 
   useEffect(() => {
-    initializePeerConnection();
     const auth = getAuth();
     const user = auth.currentUser;
     if (user) {
@@ -41,15 +39,12 @@ export default function VideoCallScreen() {
       setupICECandidateListener(pc);
 
       pc.ontrack = (event) => {
-        console.log("Track event:", event);
         setRemoteStream(event.streams[0]);
       };
 
-      pc.onconnectionstatechange = (event) => {
-        console.log('PeerConnection State Change:', pc.connectionState);
-        if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
-          console.log('PeerConnection closed or failed, cleaning up...');
-          handleLeaveCall(); 
+      pc.onconnectionstatechange = async () => {
+        if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+          await handleLeaveCall();
         }
       };
 
@@ -80,6 +75,11 @@ export default function VideoCallScreen() {
   };
 
   const handleJoinCall = async () => {
+    if (inQueue || callDocId) {
+      setErrorMessage('You are already in a call or in queue.');
+      return;
+    }
+
     const pc = await initializePeerConnection();
     if (!pc) {
       setErrorMessage('PeerConnection not initialized');
@@ -90,7 +90,7 @@ export default function VideoCallScreen() {
     try {
       const db = getFirestore();
       const queueRef = collection(db, 'queue');
-      const q = query(queueRef, where('status', '==', 'waiting'));
+      const q = query(queueRef, where('status', '==', 'waiting'), where('userId', '!=', userId));
       const querySnapshot = await getDocs(q);
 
       if (querySnapshot.empty) {
@@ -180,10 +180,9 @@ export default function VideoCallScreen() {
       }
 
       const offerDescription = new RTCSessionDescription(callData.offer);
-      
+
       if (pc.signalingState !== "stable") {
-        console.log("Peer connection is not in stable state. Resetting...");
-        await pc.setLocalDescription({type: "rollback"});
+        await pc.setLocalDescription({ type: "rollback" });
       }
 
       await pc.setRemoteDescription(offerDescription);
@@ -213,30 +212,54 @@ export default function VideoCallScreen() {
 
   const handleLeaveCall = async () => {
     try {
+      const db = getFirestore();
+
+      // Set the call status to 'ended' in Firestore to notify the other user
+      if (callDocId) {
+        const callDoc = doc(db, 'queue', callDocId);
+        await updateDoc(callDoc, { status: 'ended' });
+      }
+
+      // Stop all local tracks
+      if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+      }
+
+      // Stop all remote tracks
+      if (remoteStream) {
+        remoteStream.getTracks().forEach(track => track.stop());
+      }
+
+      // Close the peer connection
       if (peerConnection) {
-        // Notify the other user that the call is ending
-        const db = getFirestore();
-        if (callDocId) {
-          const callDoc = doc(db, 'queue', callDocId);
-          await updateDoc(callDoc, { status: 'ended' });
-        }
-
-        // Stop all local tracks before closing
-        if (localStream) {
-          localStream.getTracks().forEach(track => track.stop());
-        }
-
-        // Close the PeerConnection
         peerConnection.close();
-        
-        // Clear states
-        setPeerConnection(null);
-        setLocalStream(null);
-        setRemoteStream(null);
-        setErrorMessage('');
-        setInQueue(false);
-        setCallDocId(null);
-      } 
+      }
+
+      // Delete the room and its candidates from Firestore
+      if (callDocId) {
+        const callDoc = doc(db, 'queue', callDocId);
+        const offerCandidates = await getDocs(collection(callDoc, 'offerCandidates'));
+        offerCandidates.forEach(async (candidate) => {
+          await deleteDoc(candidate.ref);
+        });
+        const answerCandidates = await getDocs(collection(callDoc, 'answerCandidates'));
+        answerCandidates.forEach(async (candidate) => {
+          await deleteDoc(candidate.ref);
+        });
+        await deleteDoc(callDoc);
+      }
+
+      // Reset state
+      setPeerConnection(null);
+      setLocalStream(null);
+      setRemoteStream(null);
+      setErrorMessage('');
+      setInQueue(false);
+      setCallDocId(null);
+
+      // Optional: reload the app to reset UI
+      // window.location.reload();
+
     } catch (error) {
       handleError('Error leaving call:', error);
     }
@@ -245,12 +268,11 @@ export default function VideoCallScreen() {
   const listenForCallEnd = (callId) => {
     const db = getFirestore();
     const callDoc = doc(db, 'queue', callId);
-  
+
     onSnapshot(callDoc, (snapshot) => {
       const data = snapshot.data();
       if (data && data.status === 'ended') {
-        console.log("Ending call due to other user leaving.");
-        handleLeaveCall(); 
+        handleLeaveCall();
       }
     });
   };
@@ -271,11 +293,9 @@ export default function VideoCallScreen() {
         )}
         <Pressable
           style={[styles.button, styles.joinButton]}
-          onPress={() => {
-            if (!inQueue) handleJoinCall();
-          }}
+          onPress={handleJoinCall}
         >
-          <Text style={styles.buttonText}>{inQueue ? 'Finding a video partner...' : 'Join Call'}</Text>
+          <Text style={styles.buttonText}>{inQueue || callDocId ? 'In Call' : 'Join Call'}</Text>
         </Pressable>
         <Pressable
           style={[styles.button, styles.leaveButton]}
