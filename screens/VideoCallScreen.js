@@ -1,13 +1,12 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, Animated, TextInput } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getAuth, signOut } from 'firebase/auth';
+import { getAuth } from 'firebase/auth';
 import { app } from '../firebaseConfig';
 import { RTCPeerConnection, RTCIceCandidate, RTCSessionDescription } from 'react-native-webrtc';
-import { getFirestore, doc, setDoc, getDoc, onSnapshot, addDoc, collection, updateDoc, query, where, getDocs, deleteDoc } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, query, where, getDocs, updateDoc, deleteDoc, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { RTCView } from 'react-native-webrtc';
 import { mediaDevices } from 'react-native-webrtc';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const configuration = {"iceServers": [{"urls": "stun:stun.l.google.com:19302"}]};
 
@@ -17,6 +16,9 @@ export default function VideoCallScreen() {
   const [peerConnection, setPeerConnection] = useState(null);
   const [errorMessage, setErrorMessage] = useState('');
   const [userId, setUserId] = useState('');
+  const [inQueue, setInQueue] = useState(false);
+  const [callDocId, setCallDocId] = useState(null);
+  const queueTimeoutRef = useRef(null);
 
   useEffect(() => {
     initializePeerConnection();
@@ -27,46 +29,56 @@ export default function VideoCallScreen() {
     }
   }, []);
 
-  // Initialize the peer connection and set up local and remote streams
   const initializePeerConnection = async () => {
     try {
       const pc = new RTCPeerConnection(configuration);
       setPeerConnection(pc);
+
       const stream = await setupLocalStream(pc);
       setLocalStream(stream);
+
       setupRemoteStreamListener(pc);
       setupICECandidateListener(pc);
+
+      pc.ontrack = (event) => {
+        console.log("Track event:", event);
+        setRemoteStream(event.streams[0]);
+      };
+
+      pc.onconnectionstatechange = (event) => {
+        console.log('PeerConnection State Change:', pc.connectionState);
+        if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+          console.log('PeerConnection closed or failed, cleaning up...');
+          handleLeaveCall(); 
+        }
+      };
+
       return pc;
     } catch (err) {
       handleError('Error initializing PeerConnection:', err);
     }
   };
 
-  // Set up the local media stream (video and audio) and add tracks to the peer connection
   const setupLocalStream = async (pc) => {
     const stream = await mediaDevices.getUserMedia({ video: true, audio: true });
     stream.getTracks().forEach(track => pc.addTrack(track, stream));
     return stream;
   };
 
-  // Listen for remote media streams and set the remote stream state
   const setupRemoteStreamListener = (pc) => {
     pc.ontrack = event => setRemoteStream(event.streams[0]);
   };
 
-  // Listen for ICE candidates and handle them
   const setupICECandidateListener = (pc) => {
     pc.onicecandidate = handleICECandidate;
   };
 
-  // Handle new ICE candidates
   const handleICECandidate = (event) => {
     if (event.candidate) {
       console.log('New ICE candidate:', event.candidate);
     }
   };
 
-  // Join a random call by either creating an offer or answering an existing one
   const handleJoinCall = async () => {
     const pc = await initializePeerConnection();
     if (!pc) {
@@ -74,6 +86,7 @@ export default function VideoCallScreen() {
       return;
     }
 
+    setInQueue(true);
     try {
       const db = getFirestore();
       const queueRef = collection(db, 'queue');
@@ -81,16 +94,16 @@ export default function VideoCallScreen() {
       const querySnapshot = await getDocs(q);
 
       if (querySnapshot.empty) {
-        // No waiting users, create a new call
         const callDoc = await addDoc(queueRef, { userId, status: 'waiting' });
+        setCallDocId(callDoc.id);
         await createOffer(callDoc.id, pc);
-        listenForCallEnd(callDoc.id); // Listen for call end
+        listenForCallEnd(callDoc.id);
       } else {
-        // Join an existing call
         const callDoc = querySnapshot.docs[0];
+        setCallDocId(callDoc.id);
         await answerCall(callDoc.id, pc);
         await updateDoc(callDoc.ref, { status: 'connected' });
-        listenForCallEnd(callDoc.id); // Listen for call end
+        listenForCallEnd(callDoc.id);
       }
 
       setErrorMessage('');
@@ -99,7 +112,6 @@ export default function VideoCallScreen() {
     }
   };
 
-  // Create an offer and set up the call document in Firestore
   const createOffer = async (callId, pc) => {
     const db = getFirestore();
     const callDoc = doc(db, 'queue', callId);
@@ -144,7 +156,6 @@ export default function VideoCallScreen() {
     return callDoc.id;
   };
 
-  // Answer an existing call by setting the remote description and creating an answer
   const answerCall = async (callId, pc) => {
     const db = getFirestore();
     const callDoc = doc(db, 'queue', callId);
@@ -201,34 +212,45 @@ export default function VideoCallScreen() {
   };
 
   const handleLeaveCall = async () => {
-    if (peerConnection) {
-      const db = getFirestore();
-      const queueRef = collection(db, 'queue');
-      const q = query(queueRef, where('userId', '==', userId));
-      const querySnapshot = await getDocs(q);
+    try {
+      if (peerConnection) {
+        // Notify the other user that the call is ending
+        const db = getFirestore();
+        if (callDocId) {
+          const callDoc = doc(db, 'queue', callDocId);
+          await updateDoc(callDoc, { status: 'ended' });
+        }
 
-      if (!querySnapshot.empty) {
-        const callDoc = querySnapshot.docs[0];
-        await updateDoc(callDoc.ref, { status: 'ended' });
-        await deleteDoc(callDoc.ref);
-      }
+        // Stop all local tracks before closing
+        if (localStream) {
+          localStream.getTracks().forEach(track => track.stop());
+        }
 
-      await peerConnection.close();
-      setPeerConnection(null);
-      setLocalStream(null);
-      setRemoteStream(null);
-      setErrorMessage('');
+        // Close the PeerConnection
+        peerConnection.close();
+        
+        // Clear states
+        setPeerConnection(null);
+        setLocalStream(null);
+        setRemoteStream(null);
+        setErrorMessage('');
+        setInQueue(false);
+        setCallDocId(null);
+      } 
+    } catch (error) {
+      handleError('Error leaving call:', error);
     }
   };
 
   const listenForCallEnd = (callId) => {
     const db = getFirestore();
     const callDoc = doc(db, 'queue', callId);
-
+  
     onSnapshot(callDoc, (snapshot) => {
       const data = snapshot.data();
-      if (!snapshot.exists() || data?.status === 'ended') {
-        handleLeaveCall();
+      if (data && data.status === 'ended') {
+        console.log("Ending call due to other user leaving.");
+        handleLeaveCall(); 
       }
     });
   };
@@ -239,25 +261,39 @@ export default function VideoCallScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      {remoteStream && (
-        <RTCView streamURL={remoteStream.toURL()} style={styles.remoteVideo} />
-      )}
-      {localStream && (
-        <RTCView streamURL={localStream.toURL()} style={styles.localVideo} />
-      )}
-      <Pressable style={[styles.button, styles.joinButton]} onPress={handleJoinCall}>
-        <Text style={styles.buttonText}>Join Call</Text>
-      </Pressable>
-      <Pressable style={[styles.button, styles.leaveButton]} onPress={handleLeaveCall}>
-        <Text style={styles.buttonText}>Leave Call</Text>
-      </Pressable>
-      {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
-    </View>
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.container}>
+        {remoteStream && (
+          <RTCView streamURL={remoteStream.toURL()} style={styles.remoteVideo} />
+        )}
+        {localStream && (
+          <RTCView streamURL={localStream.toURL()} style={styles.localVideo} />
+        )}
+        <Pressable
+          style={[styles.button, styles.joinButton]}
+          onPress={() => {
+            if (!inQueue) handleJoinCall();
+          }}
+        >
+          <Text style={styles.buttonText}>{inQueue ? 'Finding a video partner...' : 'Join Call'}</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.button, styles.leaveButton]}
+          onPress={handleLeaveCall}
+        >
+          <Text style={styles.buttonText}>Leave Call</Text>
+        </Pressable>
+        {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#232323',
+  },
   container: {
     flex: 1,
     justifyContent: 'center',
