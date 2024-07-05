@@ -139,7 +139,9 @@ export default function VideoCallScreen() {
       if (!pc.currentRemoteDescription && data?.answer) {
         const answerDescription = new RTCSessionDescription(data.answer);
         if (pc.signalingState === "have-local-offer") {
-          pc.setRemoteDescription(answerDescription);
+          pc.setRemoteDescription(answerDescription).catch(err => {
+            handleError('Error setting remote description:', err);
+          });
         }
       }
     });
@@ -148,7 +150,9 @@ export default function VideoCallScreen() {
       snapshot.docChanges().forEach(change => {
         if (change.type === 'added') {
           const candidate = new RTCIceCandidate(change.doc.data());
-          pc.addIceCandidate(candidate);
+          pc.addIceCandidate(candidate).catch(err => {
+            handleError('Error adding ICE candidate:', err);
+          });
         }
       });
     });
@@ -200,7 +204,9 @@ export default function VideoCallScreen() {
         snapshot.docChanges().forEach(change => {
           if (change.type === 'added') {
             const candidate = new RTCIceCandidate(change.doc.data());
-            pc.addIceCandidate(candidate);
+            pc.addIceCandidate(candidate).catch(err => {
+              handleError('Error adding ICE candidate:', err);
+            });
           }
         });
       });
