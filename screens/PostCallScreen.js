@@ -7,7 +7,8 @@ export default function PostCallScreen() {
   const navigation = useNavigation();
 
   const handleGoBack = () => {
-    navigation.navigate('Main', { screen: 'Video' }); // Navigate to Video tab
+    // navigates to video tab
+    navigation.navigate('Video'); 
   };
 
   return (

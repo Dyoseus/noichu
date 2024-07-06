@@ -102,7 +102,7 @@ export default function App() {
       <NavigationContainer>
         <Stack.Navigator screenOptions={{ headerShown: false }}>
           <Stack.Screen name="Auth" component={AuthStack} />
-          <Stack.Screen name="Main" component={AppTabs} />
+          <Stack.Screen name="App" component={AppTabs} />
           
           <Stack.Screen
             name="Chat"
@@ -111,15 +111,11 @@ export default function App() {
               ...TransitionPresets.ModalSlideFromBottomIOS,
             }}
           />
-          <Stack.Screen
-            name="PostCall"
-            component={PostCallScreen}
-            options={{ 
-              title: 'Post Call',
-              headerShown: true,
-              headerLeft: null, // Remove back button
-            }}
-          />
+           <Stack.Screen
+          name="PostCall"
+          component={PostCallScreen}
+          options={{ title: 'Post Call' }}
+        />
         </Stack.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>
