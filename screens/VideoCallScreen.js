@@ -7,6 +7,7 @@ import { RTCPeerConnection, RTCIceCandidate, RTCSessionDescription } from 'react
 import { getFirestore, collection, addDoc, query, where, getDocs, updateDoc, deleteDoc, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { RTCView } from 'react-native-webrtc';
 import { mediaDevices } from 'react-native-webrtc';
+import { useNavigation } from '@react-navigation/native'; // Import useNavigation
 
 const configuration = {"iceServers": [{"urls": "stun:stun.l.google.com:19302"}]};
 
@@ -18,6 +19,9 @@ export default function VideoCallScreen() {
   const [userId, setUserId] = useState('');
   const [inQueue, setInQueue] = useState(false);
   const [callDocId, setCallDocId] = useState(null);
+  const [countdown, setCountdown] = useState(5); // Add countdown state
+  const [callConnected, setCallConnected] = useState(false); // Add callConnected state
+  const navigation = useNavigation(); // Initialize navigation
 
   useEffect(() => {
     const auth = getAuth();
@@ -26,6 +30,17 @@ export default function VideoCallScreen() {
       setUserId(user.uid);
     }
   }, []);
+
+  useEffect(() => {
+    if (callConnected && countdown === 0) {
+      handleLeaveCall();
+      navigation.navigate('PostCall'); // Navigate to another screen
+    }
+    if (callConnected && countdown > 0) {
+      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [countdown, callConnected]);
 
   const initializePeerConnection = async () => {
     try {
@@ -43,6 +58,9 @@ export default function VideoCallScreen() {
       };
 
       pc.onconnectionstatechange = async () => {
+        if (pc.connectionState === 'connected') {
+          setCallConnected(true); // Start countdown when connected
+        }
         if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
           await handleLeaveCall();
         }
@@ -156,8 +174,6 @@ export default function VideoCallScreen() {
         }
       });
     });
-
-    return callDoc.id;
   };
 
   const answerCall = async (callId, pc) => {
@@ -185,6 +201,7 @@ export default function VideoCallScreen() {
 
       const offerDescription = new RTCSessionDescription(callData.offer);
 
+      // Ensure the signaling state is correct before setting the remote description
       if (pc.signalingState !== "stable") {
         await pc.setLocalDescription({ type: "rollback" });
       }
@@ -262,6 +279,8 @@ export default function VideoCallScreen() {
       setErrorMessage('');
       setInQueue(false);
       setCallDocId(null);
+      setCallConnected(false); // Reset callConnected state
+      setCountdown(5); // Reset countdown
 
       // Optional: reload the app to reset UI
       // window.location.reload();
@@ -297,12 +316,21 @@ export default function VideoCallScreen() {
         {localStream && (
           <RTCView streamURL={localStream.toURL()} style={styles.localVideo} />
         )}
-        <Pressable
-          style={[styles.button, styles.joinButton]}
-          onPress={handleJoinCall}
-        >
-          <Text style={styles.buttonText}>{inQueue || callDocId ? 'In Call' : 'Join Call'}</Text>
-        </Pressable>
+        {inQueue || callDocId ? (
+          <Pressable
+            style={[styles.button, styles.joinButton]}
+            onPress={handleJoinCall}
+          >
+            <Text style={styles.buttonText}>In Call</Text>
+          </Pressable>
+        ) : (
+          <Pressable
+            style={[styles.button, styles.joinButton]}
+            onPress={handleJoinCall}
+          >
+            <Text style={styles.buttonText}>Join Call</Text>
+          </Pressable>
+        )}
         <Pressable
           style={[styles.button, styles.leaveButton]}
           onPress={handleLeaveCall}
@@ -310,6 +338,7 @@ export default function VideoCallScreen() {
           <Text style={styles.buttonText}>Leave Call</Text>
         </Pressable>
         {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+        {callConnected && <Text style={styles.countdownText}>{countdown}</Text>}
       </View>
     </SafeAreaView>
   );
@@ -360,5 +389,10 @@ const styles = StyleSheet.create({
   buttonText: {
     color: 'white',
     fontSize: 18,
+  },
+  countdownText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginTop: 20,
   },
 });

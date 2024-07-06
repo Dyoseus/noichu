@@ -16,6 +16,7 @@ import MessageScreen from './screens/MessageScreen';
 import ChatScreen from './screens/ChatScreen';
 import VideoCallScreen from './screens/VideoCallScreen';
 import ProfileScreen from './screens/ProfileScreen';
+import PostCallScreen from './screens/PostCallScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -101,12 +102,22 @@ export default function App() {
       <NavigationContainer>
         <Stack.Navigator screenOptions={{ headerShown: false }}>
           <Stack.Screen name="Auth" component={AuthStack} />
-          <Stack.Screen name="App" component={AppTabs} />
+          <Stack.Screen name="Main" component={AppTabs} />
+          
           <Stack.Screen
             name="Chat"
             component={ChatScreen}
             options={{
               ...TransitionPresets.ModalSlideFromBottomIOS,
+            }}
+          />
+          <Stack.Screen
+            name="PostCall"
+            component={PostCallScreen}
+            options={{ 
+              title: 'Post Call',
+              headerShown: true,
+              headerLeft: null, // Remove back button
             }}
           />
         </Stack.Navigator>
