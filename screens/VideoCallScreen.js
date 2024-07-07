@@ -1,15 +1,13 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getAuth } from 'firebase/auth';
 import { app } from '../firebaseConfig';
-import { RTCPeerConnection, RTCIceCandidate, RTCSessionDescription } from 'react-native-webrtc';
+import { RTCPeerConnection, RTCIceCandidate, RTCSessionDescription, mediaDevices, RTCView } from 'react-native-webrtc';
 import { getFirestore, collection, addDoc, query, where, getDocs, updateDoc, deleteDoc, onSnapshot, doc, getDoc } from 'firebase/firestore';
-import { RTCView } from 'react-native-webrtc';
-import { mediaDevices } from 'react-native-webrtc';
-import { useNavigation } from '@react-navigation/native'; // Import useNavigation
+import { useNavigation } from '@react-navigation/native';
 
-const configuration = {"iceServers": [{"urls": "stun:stun.l.google.com:19302"}]};
+const configuration = { "iceServers": [{ "urls": "stun:stun.l.google.com:19302" }] };
 
 export default function VideoCallScreen() {
   const [localStream, setLocalStream] = useState(null);
@@ -19,9 +17,9 @@ export default function VideoCallScreen() {
   const [userId, setUserId] = useState('');
   const [inQueue, setInQueue] = useState(false);
   const [callDocId, setCallDocId] = useState(null);
-  const [countdown, setCountdown] = useState(5); // Add countdown state
-  const [callConnected, setCallConnected] = useState(false); // Add callConnected state
-  const navigation = useNavigation(); // Initialize navigation
+  const [countdown, setCountdown] = useState(5);
+  const [callConnected, setCallConnected] = useState(false);
+  const navigation = useNavigation();
 
   useEffect(() => {
     const auth = getAuth();
@@ -34,7 +32,7 @@ export default function VideoCallScreen() {
   useEffect(() => {
     if (callConnected && countdown === 0) {
       handleLeaveCall();
-      navigation.navigate('PostCall'); // Navigate to another screen
+      navigation.navigate('PostCall');
     }
     if (callConnected && countdown > 0) {
       const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
@@ -59,7 +57,7 @@ export default function VideoCallScreen() {
 
       pc.onconnectionstatechange = async () => {
         if (pc.connectionState === 'connected') {
-          setCallConnected(true); // Start countdown when connected
+          setCallConnected(true);
         }
         if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
           await handleLeaveCall();
@@ -201,7 +199,6 @@ export default function VideoCallScreen() {
 
       const offerDescription = new RTCSessionDescription(callData.offer);
 
-      // Ensure the signaling state is correct before setting the remote description
       if (pc.signalingState !== "stable") {
         await pc.setLocalDescription({ type: "rollback" });
       }
@@ -237,28 +234,23 @@ export default function VideoCallScreen() {
     try {
       const db = getFirestore();
 
-      // Set the call status to 'ended' in Firestore to notify the other user
       if (callDocId) {
         const callDoc = doc(db, 'queue', callDocId);
         await updateDoc(callDoc, { status: 'ended' });
       }
 
-      // Stop all local tracks
       if (localStream) {
         localStream.getTracks().forEach(track => track.stop());
       }
 
-      // Stop all remote tracks
       if (remoteStream) {
         remoteStream.getTracks().forEach(track => track.stop());
       }
 
-      // Close the peer connection
       if (peerConnection) {
         peerConnection.close();
       }
 
-      // Delete the room and its candidates from Firestore
       if (callDocId) {
         const callDoc = doc(db, 'queue', callDocId);
         const offerCandidates = await getDocs(collection(callDoc, 'offerCandidates'));
@@ -272,18 +264,14 @@ export default function VideoCallScreen() {
         await deleteDoc(callDoc);
       }
 
-      // Reset state
       setPeerConnection(null);
       setLocalStream(null);
       setRemoteStream(null);
       setErrorMessage('');
       setInQueue(false);
       setCallDocId(null);
-      setCallConnected(false); // Reset callConnected state
-      setCountdown(5); // Reset countdown
-
-      // Optional: reload the app to reset UI
-      // window.location.reload();
+      setCallConnected(false);
+      setCountdown(5);
 
     } catch (error) {
       handleError('Error leaving call:', error);
@@ -316,24 +304,17 @@ export default function VideoCallScreen() {
         {localStream && (
           <RTCView streamURL={localStream.toURL()} style={styles.localVideo} />
         )}
-        {inQueue || callDocId ? (
-          <Pressable
-            style={[styles.button, styles.joinButton]}
-            onPress={handleJoinCall}
-          >
-            <Text style={styles.buttonText}>In Call</Text>
-          </Pressable>
-        ) : (
-          <Pressable
-            style={[styles.button, styles.joinButton]}
-            onPress={handleJoinCall}
-          >
-            <Text style={styles.buttonText}>Join Call</Text>
-          </Pressable>
-        )}
+        <Pressable
+          style={[styles.button, styles.joinButton]}
+          onPress={handleJoinCall}
+          disabled={!!(inQueue || callDocId)}
+        >
+          <Text style={styles.buttonText}>Find a Call</Text>
+        </Pressable>
         <Pressable
           style={[styles.button, styles.leaveButton]}
           onPress={handleLeaveCall}
+          disabled={false}
         >
           <Text style={styles.buttonText}>Leave Call</Text>
         </Pressable>
@@ -396,3 +377,4 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
 });
+
