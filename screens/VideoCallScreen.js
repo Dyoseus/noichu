@@ -1,5 +1,7 @@
+// VideoCallScreen.js
+
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getAuth } from 'firebase/auth';
 import { app } from '../firebaseConfig';
@@ -19,8 +21,10 @@ export default function VideoCallScreen() {
   const [callDocId, setCallDocId] = useState(null);
   const [countdown, setCountdown] = useState(5);
   const [callConnected, setCallConnected] = useState(false);
+  const [otherUsername, setOtherUsername] = useState('');
+  const [otherUserProfilePic, setOtherUserProfilePic] = useState(null);
   const navigation = useNavigation();
-
+  
   useEffect(() => {
     const auth = getAuth();
     const user = auth.currentUser;
@@ -30,15 +34,19 @@ export default function VideoCallScreen() {
   }, []);
 
   useEffect(() => {
+    let timer;
     if (callConnected && countdown === 0) {
       handleLeaveCall();
-      navigation.navigate('PostCall');
+      navigation.navigate('PostCall', { userId: otherUsername });
+    } else if (callConnected && countdown > 0) {
+      timer = setTimeout(() => setCountdown(countdown - 1), 1000);
     }
-    if (callConnected && countdown > 0) {
-      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
-      return () => clearTimeout(timer);
-    }
+    return () => clearTimeout(timer);
   }, [countdown, callConnected]);
+
+  const resetTimer = () => {
+    setCountdown(5);
+  };
 
   const initializePeerConnection = async () => {
     try {
@@ -58,8 +66,7 @@ export default function VideoCallScreen() {
       pc.onconnectionstatechange = async () => {
         if (pc.connectionState === 'connected') {
           setCallConnected(true);
-        }
-        if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+        } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
           await handleLeaveCall();
         }
       };
@@ -110,6 +117,7 @@ export default function VideoCallScreen() {
       const querySnapshot = await getDocs(q);
 
       if (querySnapshot.empty) {
+        const user = getAuth().currentUser;
         const callDoc = await addDoc(queueRef, { userId, status: 'waiting' });
         setCallDocId(callDoc.id);
         await createOffer(callDoc.id, pc);
@@ -117,6 +125,8 @@ export default function VideoCallScreen() {
       } else {
         const callDoc = querySnapshot.docs[0];
         setCallDocId(callDoc.id);
+        const callData = callDoc.data();
+        await fetchAndSetOtherUserInfo(callData.userId);
         await answerCall(callDoc.id, pc);
         await updateDoc(callDoc.ref, { status: 'connected' });
         listenForCallEnd(callDoc.id);
@@ -125,6 +135,20 @@ export default function VideoCallScreen() {
       setErrorMessage('');
     } catch (error) {
       handleError('Error joining call:', error);
+    }
+  };
+
+  const fetchAndSetOtherUserInfo = async (otherUserId) => {
+    try {
+      const db = getFirestore();
+      const userDoc = await getDoc(doc(db, 'users', otherUserId));
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        setOtherUsername(userData.username);
+        setOtherUserProfilePic(userData.profilePic);
+      }
+    } catch (error) {
+      handleError('Error fetching other user\'s information:', error);
     }
   };
 
@@ -271,7 +295,7 @@ export default function VideoCallScreen() {
       setInQueue(false);
       setCallDocId(null);
       setCallConnected(false);
-      setCountdown(5);
+      resetTimer();
 
     } catch (error) {
       handleError('Error leaving call:', error);
@@ -297,6 +321,15 @@ export default function VideoCallScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      {callConnected && (
+        <View style={styles.header}>
+          <Pressable onPress={handleLeaveCall} style={styles.leaveButton}>
+            <Image source={require('../assets/arrow.png')} style={styles.leaveImage} />
+          </Pressable>
+          {otherUserProfilePic && <Image source={{ uri: otherUserProfilePic }} style={styles.profilePic} />}
+          <Text style={styles.title}>Video with {otherUsername}</Text>
+        </View>
+      )}
       <View style={styles.container}>
         {remoteStream && (
           <RTCView streamURL={remoteStream.toURL()} style={styles.remoteVideo} />
@@ -329,6 +362,32 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: '#232323',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 10,
+    backgroundColor: '#2f4f4f',
+  },
+  leaveButton: {
+    position: 'absolute',
+    left: 10,
+  },
+  leaveImage: {
+    width: 25,
+    height: 25,
+  },
+  profilePic: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 10,
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#fff',
   },
   container: {
     flex: 1,
@@ -377,4 +436,3 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
 });
-
