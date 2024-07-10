@@ -104,7 +104,14 @@ export default function ProfileScreen({ navigation }) {
     }
 };
 
-
+  const editProfile = async () => {
+    try {
+      await alert("editProfile");
+      navigation.navigate('Auth');
+    } catch (error) {
+      alert(error.message);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -121,6 +128,11 @@ export default function ProfileScreen({ navigation }) {
       {uploading && <Text>Uploading...</Text>}
       <Pressable style={styles.logoutButton} onPress={handleLogout}>
         <Text style={styles.logoutButtonText}>Logout</Text>
+      </Pressable>
+
+      // TODO: make this whole Profile Screen scrollable up and down, include each horizontal section for each customization of interests
+      <Pressable style={styles.editProfileButton} onPress={editProfile}>
+        <Text sylte={styles.editProfileButtonText}>Edit Profile</Text>
       </Pressable>
     </SafeAreaView>
   );
@@ -146,6 +158,16 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   logoutButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  editProfileButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    backgroundColor: '#ff4444',
+    borderRadius: 4,
+  },
+  editProfileButtonText: {
     color: '#fff',
     fontWeight: 'bold',
   },
