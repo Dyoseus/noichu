@@ -7,6 +7,7 @@ import { getAuth } from 'firebase/auth';
 import { app } from '../firebaseConfig';
 import { RTCPeerConnection, RTCIceCandidate, RTCSessionDescription, mediaDevices, RTCView } from 'react-native-webrtc';
 import { getFirestore, collection, addDoc, query, where, getDocs, updateDoc, deleteDoc, onSnapshot, doc, getDoc } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { useNavigation } from '@react-navigation/native';
 
 const configuration = { "iceServers": [{ "urls": "stun:stun.l.google.com:19302" }] };
@@ -102,39 +103,41 @@ export default function VideoCallScreen() {
       setErrorMessage('You are already in a call or in queue.');
       return;
     }
-
+  
     const pc = await initializePeerConnection();
     if (!pc) {
       setErrorMessage('PeerConnection not initialized');
       return;
     }
-
+  
     setInQueue(true);
     try {
-      const db = getFirestore();
-      const queueRef = collection(db, 'queue');
-      const q = query(queueRef, where('status', '==', 'waiting'), where('userId', '!=', userId));
-      const querySnapshot = await getDocs(q);
-
-      if (querySnapshot.empty) {
-        const user = getAuth().currentUser;
-        const callDoc = await addDoc(queueRef, { userId, status: 'waiting' });
-        setCallDocId(callDoc.id);
-        await createOffer(callDoc.id, pc);
-        listenForCallEnd(callDoc.id);
-      } else {
-        const callDoc = querySnapshot.docs[0];
-        setCallDocId(callDoc.id);
-        const callData = callDoc.data();
-        await fetchAndSetOtherUserInfo(callData.userId);
-        await answerCall(callDoc.id, pc);
-        await updateDoc(callDoc.ref, { status: 'connected' });
-        listenForCallEnd(callDoc.id);
-      }
-
+      const functions = getFunctions(app);
+      const findMatch = httpsCallable(functions, 'findMatch');
+      const result = await findMatch();
+      const { callDocId } = result.data;
+  
+      setCallDocId(callDocId);
+      await setupCall(callDocId, pc);
+      listenForCallEnd(callDocId);
+  
       setErrorMessage('');
     } catch (error) {
       handleError('Error joining call:', error);
+      setInQueue(false);
+    }
+  };
+
+  const setupCall = async (callDocId, pc) => {
+    const db = getFirestore();
+    const callDoc = doc(db, 'queue', callDocId);
+    const callData = (await getDoc(callDoc)).data();
+  
+    if (callData.status === 'matched') {
+      await fetchAndSetOtherUserInfo(callData.matchedUserId);
+      await answerCall(callDocId, pc);
+    } else {
+      await createOffer(callDocId, pc);
     }
   };
 
@@ -256,38 +259,21 @@ export default function VideoCallScreen() {
 
   const handleLeaveCall = async () => {
     try {
-      const db = getFirestore();
-
-      if (callDocId) {
-        const callDoc = doc(db, 'queue', callDocId);
-        await updateDoc(callDoc, { status: 'ended' });
-      }
-
+      const functions = getFunctions(app);
+      const leaveCall = httpsCallable(functions, 'leaveCall');
+      await leaveCall({ callDocId });
+  
+      // Clean up local resources
       if (localStream) {
         localStream.getTracks().forEach(track => track.stop());
       }
-
       if (remoteStream) {
         remoteStream.getTracks().forEach(track => track.stop());
       }
-
       if (peerConnection) {
         peerConnection.close();
       }
-
-      if (callDocId) {
-        const callDoc = doc(db, 'queue', callDocId);
-        const offerCandidates = await getDocs(collection(callDoc, 'offerCandidates'));
-        offerCandidates.forEach(async (candidate) => {
-          await deleteDoc(candidate.ref);
-        });
-        const answerCandidates = await getDocs(collection(callDoc, 'answerCandidates'));
-        answerCandidates.forEach(async (candidate) => {
-          await deleteDoc(candidate.ref);
-        });
-        await deleteDoc(callDoc);
-      }
-
+  
       setPeerConnection(null);
       setLocalStream(null);
       setRemoteStream(null);
@@ -296,7 +282,7 @@ export default function VideoCallScreen() {
       setCallDocId(null);
       setCallConnected(false);
       resetTimer();
-
+  
     } catch (error) {
       handleError('Error leaving call:', error);
     }
