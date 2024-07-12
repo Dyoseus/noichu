@@ -24,8 +24,9 @@ export default function VideoCallScreen() {
   const [callConnected, setCallConnected] = useState(false);
   const [otherUsername, setOtherUsername] = useState('');
   const [otherUserProfilePic, setOtherUserProfilePic] = useState(null);
+  const [leavingCall, setLeavingCall] = useState(false); // New state for preventing multiple leave attempts
   const navigation = useNavigation();
-  
+
   useEffect(() => {
     const auth = getAuth();
     const user = auth.currentUser;
@@ -103,24 +104,24 @@ export default function VideoCallScreen() {
       setErrorMessage('You are already in a call or in queue.');
       return;
     }
-  
+
     const pc = await initializePeerConnection();
     if (!pc) {
       setErrorMessage('PeerConnection not initialized');
       return;
     }
-  
+
     setInQueue(true);
     try {
       const functions = getFunctions(app);
       const findMatch = httpsCallable(functions, 'findMatch');
       const result = await findMatch();
       const { callDocId } = result.data;
-  
+
       setCallDocId(callDocId);
       await setupCall(callDocId, pc);
       listenForCallEnd(callDocId);
-  
+
       setErrorMessage('');
     } catch (error) {
       handleError('Error joining call:', error);
@@ -132,7 +133,7 @@ export default function VideoCallScreen() {
     const db = getFirestore();
     const callDoc = doc(db, 'queue', callDocId);
     const callData = (await getDoc(callDoc)).data();
-  
+
     if (callData.status === 'matched') {
       await fetchAndSetOtherUserInfo(callData.matchedUserId);
       await answerCall(callDocId, pc);
@@ -258,34 +259,65 @@ export default function VideoCallScreen() {
   };
 
   const handleLeaveCall = async () => {
+    if (leavingCall) return;
+    setLeavingCall(true);
+    console.log('Attempting to leave call:', { callDocId, peerConnection });
+  
     try {
+      if (!callDocId) {
+        console.warn('No active call to leave');
+        resetState();
+        return;
+      }
+  
       const functions = getFunctions(app);
       const leaveCall = httpsCallable(functions, 'leaveCall');
       await leaveCall({ callDocId });
   
       // Clean up local resources
-      if (localStream) {
-        localStream.getTracks().forEach(track => track.stop());
-      }
-      if (remoteStream) {
-        remoteStream.getTracks().forEach(track => track.stop());
-      }
-      if (peerConnection) {
-        peerConnection.close();
-      }
+      cleanupResources();
   
-      setPeerConnection(null);
-      setLocalStream(null);
-      setRemoteStream(null);
-      setErrorMessage('');
-      setInQueue(false);
-      setCallDocId(null);
-      setCallConnected(false);
-      resetTimer();
+      // Reset state
+      resetState();
   
     } catch (error) {
-      handleError('Error leaving call:', error);
+      console.error('Error leaving call:', error);
+      // Log the full error object for debugging
+      console.log('Full error object:', JSON.stringify(error, null, 2));
+      
+      // Handle specific error types
+      if (error.code === 'not-found') {
+        console.warn('Call document not found. It may have already been cleaned up.');
+        resetState();
+      } else {
+        setErrorMessage(`Failed to leave call: ${error.message}`);
+      }
+    } finally {
+      setLeavingCall(false);
     }
+  };
+  
+  const cleanupResources = () => {
+    if (localStream) {
+      localStream.getTracks().forEach(track => track.stop());
+    }
+    if (remoteStream) {
+      remoteStream.getTracks().forEach(track => track.stop());
+    }
+    if (peerConnection) {
+      peerConnection.close();
+    }
+  };
+  
+  const resetState = () => {
+    setPeerConnection(null);
+    setLocalStream(null);
+    setRemoteStream(null);
+    setErrorMessage('');
+    setInQueue(false);
+    setCallDocId(null);
+    setCallConnected(false);
+    resetTimer();
   };
 
   const listenForCallEnd = (callId) => {

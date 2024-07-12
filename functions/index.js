@@ -64,6 +64,7 @@ exports.leaveCall = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError('invalid-argument', 'Call document ID is required.');
   }
 
+
   const callDoc = await db.collection('queue').doc(callDocId).get();
 
   if (!callDoc.exists) {
