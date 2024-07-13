@@ -9,61 +9,52 @@ import {
   Platform,
   Alert
 } from 'react-native';
-import * as AuthSession from 'expo-auth-session';
+import firebase from '../firebaseConfig'; // Ensure this is correctly configured and imported
 import { doc, setDoc } from 'firebase/firestore';
-import { db } from '../firebaseConfig'; // Import db from your config file
+import { db } from '../firebaseConfig';
 
 export default function SignUpScreen({ navigation }) {
   const [step, setStep] = useState(1);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
+  const [verificationId, setVerificationId] = useState(null);
   const [firstName, setFirstName] = useState('');
   const [birthDate, setBirthDate] = useState('');
   const [gender, setGender] = useState(null);
-  const [verificationId, setVerificationId] = useState(null);
 
   const phoneInput = useRef(null);
 
+  // Firebase Recaptcha Verifier
+  const recaptchaVerifier = useRef(new firebase.auth.RecaptchaVerifier('recaptcha-container'));
+
   const handleSendVerificationCode = async () => {
     try {
-      const formattedPhoneNumber = `+${phoneNumber.replace(/\D/g, '')}`;
-      const request = await AuthSession.startAsync({
-        authUrl:
-          `https://us-central1-YOUR_PROJECT_ID.cloudfunctions.net/createPhoneAuthRequest?phone=${formattedPhoneNumber}`
-      });
-      if (request.type === 'success') {
-        setVerificationId(request.params.verificationId);
-        setStep(2);
-      } else {
-        throw new Error('Phone number verification failed');
-      }
+      const phoneProvider = new firebase.auth.PhoneAuthProvider();
+      const id = await phoneProvider.verifyPhoneNumber(
+        phoneNumber, 
+        recaptchaVerifier.current
+      );
+      setVerificationId(id);
+      setStep(2);
     } catch (error) {
-      console.error('Error sending verification code:', error.message);
+      console.error('Error sending verification code:', error);
       Alert.alert('Error', 'Failed to send verification code. Please try again.');
     }
   };
 
   const handleVerifyCode = async () => {
     try {
-      const request = await AuthSession.startAsync({
-        authUrl:
-          `https://us-central1-YOUR_PROJECT_ID.cloudfunctions.net/verifyPhoneAuthCode?verificationId=${verificationId}&code=${verificationCode}`
-      });
-      if (request.type === 'success') {
-        setStep(3);
-      } else {
-        throw new Error('Code verification failed');
-      }
+      const credential = firebase.auth.PhoneAuthProvider.credential(verificationId, verificationCode);
+      await firebase.auth().signInWithCredential(credential);
+      setStep(3);
     } catch (error) {
-      console.error('Error verifying code:', error.message);
+      console.error('Error verifying code:', error);
       Alert.alert('Error', 'Invalid verification code. Please try again.');
     }
   };
 
   const handleSignUp = async () => {
     try {
-      // Here you would typically create a user in your authentication system
-      // For this example, we'll just create a document in Firestore
       const userId = 'user_' + Math.random().toString(36).substr(2, 9); // Generate a random user ID
       await setDoc(doc(db, 'users', userId), {
         phoneNumber: phoneNumber,
@@ -71,31 +62,32 @@ export default function SignUpScreen({ navigation }) {
         birthDate: birthDate,
         gender: gender,
       });
-
       console.log('User created successfully:', userId);
       navigation.navigate('Login');
     } catch (error) {
-      console.error('Error creating user:', error.message);
+      console.error('Error creating user:', error);
       Alert.alert('Error', 'Failed to create user. Please try again.');
     }
   };
 
+  // Render functions for each step
   const renderStepOne = () => (
     <View style={styles.container}>
       <Text style={styles.title}>Enter your phone number to begin</Text>
       <TextInput
-        ref={phoneInput} // Add ref here
+        ref={phoneInput}
         style={styles.input}
         placeholder="Phone Number (e.g. +1XXXXXXXXXX)"
         placeholderTextColor="#e0e0e0"
         value={phoneNumber}
         onChangeText={setPhoneNumber}
         keyboardType="phone-pad"
-        autoFocus={true} // Autofocus on the input
+        autoFocus={true}
       />
       <TouchableOpacity style={styles.button} onPress={handleSendVerificationCode}>
         <Text style={styles.buttonText}>Send Code</Text>
       </TouchableOpacity>
+      <div id="recaptcha-container"></div> {/* This is required for Firebase reCAPTCHA */}
     </View>
   );
 
