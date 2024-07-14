@@ -6,10 +6,94 @@ import { getFirestore, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import * as ImagePicker from 'expo-image-picker';
 import { app } from '../firebaseConfig';
+import { ScrollView } from 'react-native-gesture-handler';
 
 const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
+
+const SECTIONS = [
+  {
+    header : 'Gender',
+    items : 'Men'
+  },
+  {
+    header : 'Age',
+    items : 18
+  },
+  {
+    header : 'Gender',
+    items : 'Men'
+  },
+  {
+    header : 'Age',
+    items : 18
+  },
+  {
+    header : 'Gender',
+    items : 'Men'
+  },
+  {
+    header : 'Age',
+    items : 18
+  },
+  {
+    header : 'Gender',
+    items : 'Men'
+  },
+  {
+    header : 'Age',
+    items : 18
+  },
+  {
+    header : 'Gender',
+    items : 'Men'
+  },
+  {
+    header : 'Age',
+    items : 18
+  },
+  {
+    header : 'Gender',
+    items : 'Men'
+  },
+  {
+    header : 'Age',
+    items : 18
+  },
+  {
+    header : 'Gender',
+    items : 'Men'
+  },
+  {
+    header : 'Age',
+    items : 18
+  },
+  {
+    header : 'Gender',
+    items : 'Men'
+  },
+  {
+    header : 'Age',
+    items : 18
+  },
+  {
+    header : 'Gender',
+    items : 'Men'
+  },
+  {
+    header : 'Age',
+    items : 18
+  },
+  {
+    header : 'Gender',
+    items : 'Men'
+  },
+  {
+    header : 'Age',
+    items : 18
+  }
+];
 
 export default function ProfileScreen({ navigation }) {
   const [username, setUsername] = useState('');
@@ -115,25 +199,33 @@ export default function ProfileScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Pressable onPress={handleSelectImage}>
-        {profilePic ? (
-          <Image source={{ uri: profilePic }} style={styles.profileImage} />
-        ) : (
-          <View style={styles.imagePlaceholder}>
-            <Text style={styles.imagePlaceholderText}>Select Image</Text>
-          </View>
-        )}
-      </Pressable>
-      <Text style={styles.username}>{username ? `Welcome, ${username}` : 'Loading...'}</Text>
-      {uploading && <Text>Uploading...</Text>}
-      <Pressable style={styles.logoutButton} onPress={handleLogout}>
-        <Text style={styles.logoutButtonText}>Logout</Text>
-      </Pressable>
+      <ScrollView>
+        <Pressable onPress={handleSelectImage}>
+          {profilePic ? (
+            <Image source={{ uri: profilePic }} style={styles.profileImage} />
+          ) : (
+            <View style={styles.imagePlaceholder}>
+              <Text style={styles.imagePlaceholderText}>Select Image</Text>
+            </View>
+          )}
+        </Pressable>
+        <Text style={styles.username}>{username ? `Welcome, ${username}` : 'Loading...'}</Text>
+        {uploading && <Text>Uploading...</Text>}
+        <Pressable style={styles.logoutButton} onPress={handleLogout}>
+          <Text style={styles.logoutButtonText}>Logout</Text>
+        </Pressable>
 
-      // TODO: make this whole Profile Screen scrollable up and down, include each horizontal section for each customization of interests
-      <Pressable style={styles.editProfileButton} onPress={editProfile}>
-        <Text sylte={styles.editProfileButtonText}>Edit Profile</Text>
-      </Pressable>
+        {/* TODO: make this whole Profile Screen scrollable up and down, include each horizontal section for each customization of interests */}
+        <Pressable style={styles.editProfileButton} onPress={editProfile}>
+          <Text sylte={styles.editProfileButtonText}>Edit Profile</Text>
+        </Pressable>
+
+        {SECTIONS.map( ({header, items}) => (
+          <View key={header}>
+            <Text>{header}</Text>
+          </View>
+        ))}
+      </ScrollView>
     </SafeAreaView>
   );
 }

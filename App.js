@@ -84,7 +84,7 @@ function AppTabs() {
         tabBarInactiveTintColor: 'white',
         tabBarLabelStyle: { fontSize: 12, fontWeight: 'bold' },
         tabBarStyle: { backgroundColor: '#2f4f4f' },
-        headerShown: false, // Hide header for bottom tabs
+        headerShown: true, // Hide header for bottom tabs
       }}
     >
       <Tab.Screen name="Friends" component={SearchTabNavigator} />
