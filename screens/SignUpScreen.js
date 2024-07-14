@@ -1,40 +1,42 @@
-import React, { useState, useRef } from 'react';
-import { 
-  View, 
-  TextInput, 
-  StyleSheet, 
-  TouchableOpacity, 
-  Text, 
+import React, { useState } from 'react';
+import {
+  View,
+  TextInput,
+  StyleSheet,
+  TouchableOpacity,
+  Text,
   KeyboardAvoidingView,
   Platform,
-  Alert
+  Alert,
+  ScrollView
 } from 'react-native';
-import firebase from '../firebaseConfig'; // Ensure this is correctly configured and imported
-import { doc, setDoc } from 'firebase/firestore';
+import { Picker } from '@react-native-picker/picker';
+import auth from '@react-native-firebase/auth';
 import { db } from '../firebaseConfig';
+import { doc, setDoc } from 'firebase/firestore';
+
+const countryCodes = [
+  { label: 'USA (+1)', value: '+1' },
+  { label: 'UK (+44)', value: '+44' },
+  { label: 'Australia (+61)', value: '+61' },
+  // Add more country codes as needed
+];
 
 export default function SignUpScreen({ navigation }) {
   const [step, setStep] = useState(1);
+  const [countryCode, setCountryCode] = useState('+1');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
-  const [verificationId, setVerificationId] = useState(null);
+  const [confirm, setConfirm] = useState(null);
   const [firstName, setFirstName] = useState('');
   const [birthDate, setBirthDate] = useState('');
-  const [gender, setGender] = useState(null);
-
-  const phoneInput = useRef(null);
-
-  // Firebase Recaptcha Verifier
-  const recaptchaVerifier = useRef(new firebase.auth.RecaptchaVerifier('recaptcha-container'));
+  const [gender, setGender] = useState('');
 
   const handleSendVerificationCode = async () => {
     try {
-      const phoneProvider = new firebase.auth.PhoneAuthProvider();
-      const id = await phoneProvider.verifyPhoneNumber(
-        phoneNumber, 
-        recaptchaVerifier.current
-      );
-      setVerificationId(id);
+      const fullPhoneNumber = `${countryCode}${phoneNumber}`;
+      const confirmation = await auth().signInWithPhoneNumber(fullPhoneNumber);
+      setConfirm(confirmation);
       setStep(2);
     } catch (error) {
       console.error('Error sending verification code:', error);
@@ -44,8 +46,7 @@ export default function SignUpScreen({ navigation }) {
 
   const handleVerifyCode = async () => {
     try {
-      const credential = firebase.auth.PhoneAuthProvider.credential(verificationId, verificationCode);
-      await firebase.auth().signInWithCredential(credential);
+      await confirm.confirm(verificationCode);
       setStep(3);
     } catch (error) {
       console.error('Error verifying code:', error);
@@ -55,29 +56,45 @@ export default function SignUpScreen({ navigation }) {
 
   const handleSignUp = async () => {
     try {
-      const userId = 'user_' + Math.random().toString(36).substr(2, 9); // Generate a random user ID
-      await setDoc(doc(db, 'users', userId), {
-        phoneNumber: phoneNumber,
-        firstName: firstName,
-        birthDate: birthDate,
-        gender: gender,
-      });
-      console.log('User created successfully:', userId);
-      navigation.navigate('Login');
+      const user = auth().currentUser;
+      if (user) {
+        const userDocRef = doc(db, 'users', user.uid);
+        await setDoc(userDocRef, {
+          phoneNumber: `${countryCode}${phoneNumber}`,
+          firstName: firstName,
+          birthDate: birthDate,
+          gender: gender,
+        });
+        console.log('User created successfully:', user.uid);
+        Alert.alert('Success', 'Account created successfully!', [
+          { text: 'OK', onPress: () => navigation.navigate('Login') }
+        ]);
+      } else {
+        throw new Error('No authenticated user found');
+      }
     } catch (error) {
       console.error('Error creating user:', error);
       Alert.alert('Error', 'Failed to create user. Please try again.');
     }
   };
 
-  // Render functions for each step
   const renderStepOne = () => (
-    <View style={styles.container}>
+    <ScrollView contentContainerStyle={styles.scrollViewContent}>
       <Text style={styles.title}>Enter your phone number to begin</Text>
+      <View style={styles.pickerContainer}>
+        <Picker
+          selectedValue={countryCode}
+          style={styles.picker}
+          onValueChange={(itemValue) => setCountryCode(itemValue)}
+        >
+          {countryCodes.map((country) => (
+            <Picker.Item key={country.value} label={country.label} value={country.value} />
+          ))}
+        </Picker>
+      </View>
       <TextInput
-        ref={phoneInput}
         style={styles.input}
-        placeholder="Phone Number (e.g. +1XXXXXXXXXX)"
+        placeholder="Phone Number (e.g. XXXXXXXXXX)"
         placeholderTextColor="#e0e0e0"
         value={phoneNumber}
         onChangeText={setPhoneNumber}
@@ -87,12 +104,11 @@ export default function SignUpScreen({ navigation }) {
       <TouchableOpacity style={styles.button} onPress={handleSendVerificationCode}>
         <Text style={styles.buttonText}>Send Code</Text>
       </TouchableOpacity>
-      <div id="recaptcha-container"></div> {/* This is required for Firebase reCAPTCHA */}
-    </View>
+    </ScrollView>
   );
 
   const renderStepTwo = () => (
-    <View style={styles.container}>
+    <ScrollView contentContainerStyle={styles.scrollViewContent}>
       <Text style={styles.title}>Enter Verification Code</Text>
       <TextInput
         style={styles.input}
@@ -105,14 +121,11 @@ export default function SignUpScreen({ navigation }) {
       <TouchableOpacity style={styles.button} onPress={handleVerifyCode}>
         <Text style={styles.buttonText}>Verify</Text>
       </TouchableOpacity>
-    </View>
+    </ScrollView>
   );
 
   const renderStepThree = () => (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-    >
+    <ScrollView contentContainerStyle={styles.scrollViewContent}>
       <Text style={styles.title}>Tell us about yourself</Text>
       <TextInput
         style={styles.input}
@@ -151,7 +164,7 @@ export default function SignUpScreen({ navigation }) {
       <TouchableOpacity style={styles.button} onPress={handleSignUp}>
         <Text style={styles.buttonText}>Sign Up</Text>
       </TouchableOpacity>
-    </KeyboardAvoidingView>
+    </ScrollView>
   );
 
   const renderCurrentStep = () => {
@@ -164,12 +177,15 @@ export default function SignUpScreen({ navigation }) {
   };
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={styles.container}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 0}
+    >
       {renderCurrentStep()}
-    </View>
+    </KeyboardAvoidingView>
   );
 }
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -177,12 +193,27 @@ const styles = StyleSheet.create({
     padding: 16,
     backgroundColor: '#232323',
   },
+  scrollViewContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    padding: 16,
+  },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     color: 'white',
     marginBottom: 20,
     textAlign: 'center',
+  },
+  pickerContainer: {
+    marginBottom: 12,
+    borderColor: '#2f4f4f',
+    borderWidth: 0.5,
+    borderRadius: 15,
+    backgroundColor: '#2f4f4f',
+  },
+  picker: {
+    color: 'white',
   },
   input: {
     height: 40,

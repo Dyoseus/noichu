@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "742048409803",
+    "firebase_url": "https://noichu-43249-default-rtdb.firebaseio.com",
+    "project_id": "noichu-43249",
+    "storage_bucket": "noichu-43249.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:742048409803:android:70e7f6d06439d59c10134e",
+        "android_client_info": {
+          "package_name": "com.albert.noichu"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBDN0fEpOn6v0q8ASJYittafnORmI3KOwc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
