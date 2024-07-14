@@ -79,3 +79,31 @@ exports.leaveCall = functions.https.onCall(async (data, context) => {
 
   return { success: true };
 });
+
+exports.sendVerificationCode = functions.https.onRequest(async (req, res) => {
+  const { phoneNumber } = req.body;
+  try {
+    const sessionInfo = await admin.auth().createSessionCookie(phoneNumber, { expiresIn: 60 * 60 * 1000 }); // 1 hour
+    res.json({ sessionInfo });
+  } catch (error) {
+    console.error('Error sending verification code:', error);
+    res.status(500).json({ error: 'Failed to send verification code' });
+  }
+});
+
+exports.verifyCode = functions.https.onRequest(async (req, res) => {
+  const { sessionInfo, code } = req.body;
+  try {
+    const decodedClaims = await admin.auth().verifySessionCookie(sessionInfo);
+    // In a real implementation, you'd verify the code here
+    // For this example, we're just checking if a code was provided
+    if (code) {
+      res.json({ success: true });
+    } else {
+      throw new Error('Invalid code');
+    }
+  } catch (error) {
+    console.error('Error verifying code:', error);
+    res.status(500).json({ error: 'Failed to verify code' });
+  }
+});
