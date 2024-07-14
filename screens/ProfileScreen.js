@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Image, Button } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getAuth, signOut } from 'firebase/auth';
 import { getFirestore, doc, getDoc, updateDoc } from 'firebase/firestore';
@@ -14,84 +14,24 @@ const storage = getStorage(app);
 
 const SECTIONS = [
   {
-    header : 'Gender',
-    items : 'Men'
+    header : 'Personal Info',
+    fields : {
+      name : '',
+      gender : '',
+      location : ''
+    }
   },
   {
-    header : 'Age',
-    items : 18
-  },
-  {
-    header : 'Gender',
-    items : 'Men'
-  },
-  {
-    header : 'Age',
-    items : 18
-  },
-  {
-    header : 'Gender',
-    items : 'Men'
-  },
-  {
-    header : 'Age',
-    items : 18
-  },
-  {
-    header : 'Gender',
-    items : 'Men'
-  },
-  {
-    header : 'Age',
-    items : 18
-  },
-  {
-    header : 'Gender',
-    items : 'Men'
-  },
-  {
-    header : 'Age',
-    items : 18
-  },
-  {
-    header : 'Gender',
-    items : 'Men'
-  },
-  {
-    header : 'Age',
-    items : 18
-  },
-  {
-    header : 'Gender',
-    items : 'Men'
-  },
-  {
-    header : 'Age',
-    items : 18
-  },
-  {
-    header : 'Gender',
-    items : 'Men'
-  },
-  {
-    header : 'Age',
-    items : 18
-  },
-  {
-    header : 'Gender',
-    items : 'Men'
-  },
-  {
-    header : 'Age',
-    items : 18
-  },
-  {
-    header : 'Gender',
-    items : 'Men'
-  },
-  {
-    header : 'Age',
-    items : 18
+    header : 'Preferences',
+    fields : {
+      meet : [],
+      find : [],
+      ageRange : {
+        min : '',
+        max : ''
+      },
+      locationRadius : ''
+    }
   }
 ];
 
@@ -99,6 +39,16 @@ export default function ProfileScreen({ navigation }) {
   const [username, setUsername] = useState('');
   const [profilePic, setProfilePic] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [gender, setGender] = useState('');
+  const [phone, setPhoneNumber] = useState('');
+  const [meet, setMeet] = useState('');
+  const [find, setFind] = useState('');
+  const [ageRange, setAgeRange] = useState('');
+  const [location, setLocation] = useState('');
+  const [locationRadius, setLocationRadius] = useState('');
+  
+
+  
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -108,6 +58,13 @@ export default function ProfileScreen({ navigation }) {
         if (userDoc.exists()) {
           setUsername(userDoc.data().username);
           setProfilePic(userDoc.data().profilePic);
+          setGender(userDoc.data().gender);
+          setPhoneNumber(userDoc.data().phone);
+          setAgeRange(userDoc.data().ageRange);
+          setMeet(userDoc.data().meet);
+          setFind(userDoc.data().find);
+          setLocation(userDoc.data().location);
+          setLocationRadius(userDoc.data().locationRadius);
         }
       }
     };
@@ -220,11 +177,22 @@ export default function ProfileScreen({ navigation }) {
           <Text sylte={styles.editProfileButtonText}>Edit Profile</Text>
         </Pressable>
 
-        {SECTIONS.map( ({header, items}) => (
-          <View key={header}>
-            <Text>{header}</Text>
-          </View>
-        ))}
+        <View>
+          {/* Personal Infromation Section */}
+          <Text style={{fontSize : 20}}>Personal Information</Text>
+          <Text>Name: {username} </Text>
+          <Text>Phone: {phone} </Text>
+          <Text>Gender : {gender} </Text>
+          
+          <Button 
+          title='add'
+          onPress={() => {
+            updateDoc(doc(db, 'users', auth.currentUser.uid), {
+              gender : 'Female'
+          });
+          }}/>
+          <Text style={{fontSize : 20}}>Personal Information</Text>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
