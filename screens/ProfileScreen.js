@@ -7,6 +7,7 @@ import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import * as ImagePicker from 'expo-image-picker';
 import { app } from '../firebaseConfig';
 import { ScrollView } from 'react-native-gesture-handler';
+import { StatusBar } from 'expo-status-bar';
 
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -47,9 +48,6 @@ export default function ProfileScreen({ navigation }) {
   const [location, setLocation] = useState('');
   const [locationRadius, setLocationRadius] = useState('');
   
-
-  
-
   useEffect(() => {
     const fetchUserData = async () => {
       const user = auth.currentUser;
@@ -166,6 +164,7 @@ export default function ProfileScreen({ navigation }) {
             </View>
           )}
         </Pressable>
+        
         <Text style={styles.username}>{username ? `Welcome, ${username}` : 'Loading...'}</Text>
         {uploading && <Text>Uploading...</Text>}
         <Pressable style={styles.logoutButton} onPress={handleLogout}>
@@ -174,24 +173,32 @@ export default function ProfileScreen({ navigation }) {
 
         {/* TODO: make this whole Profile Screen scrollable up and down, include each horizontal section for each customization of interests */}
         <Pressable style={styles.editProfileButton} onPress={editProfile}>
-          <Text sylte={styles.editProfileButtonText}>Edit Profile</Text>
+          <Text style={styles.editProfileButtonText}>Edit Profile</Text>
         </Pressable>
 
         <View>
-          {/* Personal Infromation Section */}
-          <Text style={{fontSize : 20}}>Personal Information</Text>
-          <Text>Name: {username} </Text>
-          <Text>Phone: {phone} </Text>
-          <Text>Gender : {gender} </Text>
+          {/* Personal Information Section */}
+          <Text style={styles.infoTitle}>Personal Information</Text>
+          <Text>Name: {username}</Text>
+          <Text>Phone: {phone}</Text>
+          <Text>Gender: {gender}</Text>
+          <Text>location: {find}</Text>
+
+          {/*Preference Information*/}
+          <Text style={styles.infoTitle}>Preferences</Text>
+          <Text>Meet: {meet}</Text>
+          <Text>Find: {find}</Text>
+          <Text>Age Range of Interests: {ageRange}</Text>
           
-          <Button 
+          {/* <Button 
           title='add'
           onPress={() => {
+            const newGender = 'e';
             updateDoc(doc(db, 'users', auth.currentUser.uid), {
-              gender : 'Female'
-          });
-          }}/>
-          <Text style={{fontSize : 20}}>Personal Information</Text>
+              gender : newGender
+            });
+            setGender(newGender);
+          }}/> */}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -249,5 +256,9 @@ const styles = StyleSheet.create({
   imagePlaceholderText: {
     color: '#fff',
     fontSize: 16,
+  },
+  infoTitle:{
+    fontSize: 20,
+    fontWeight: 'bold'
   },
 });
