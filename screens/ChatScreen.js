@@ -14,31 +14,10 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { 
-  getFirestore, 
-  doc, 
-  collection, 
-  addDoc, 
-  onSnapshot, 
-  orderBy, 
-  query, 
-  updateDoc, 
-  getDoc, 
-  where, 
-  getDocs, 
-  deleteDoc, 
-  setDoc,
-  startAfter,
-  limit,
-  getDocsFromCache, 
-  DocumentSnapshot
-} from 'firebase/firestore';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { getAuth } from 'firebase/auth';
-import { app } from '../firebaseConfig';
+import firestore from '@react-native-firebase/firestore';
+import storage from '@react-native-firebase/storage';
+import auth from '@react-native-firebase/auth';
 
-const db = getFirestore(app);
-const auth = getAuth(app);
 const MESSAGES_PER_PAGE = 20; 
 
 export default function ChatScreen({ route, navigation }) {
@@ -52,7 +31,7 @@ export default function ChatScreen({ route, navigation }) {
   const [allMessagesLoaded, setAllMessagesLoaded] = useState(false);
   const flatListRef = useRef(null);
   const queueTimeoutRef = useRef(null);
-  const user = auth.currentUser;
+  const user = auth().currentUser;
   const [image, setImage] = useState(null);
   const [uploading, setUploading] = useState(false); // Track uploading state
   const [friendProfilePic, setFriendProfilePic] = useState(null);
@@ -70,18 +49,18 @@ export default function ChatScreen({ route, navigation }) {
 
   useEffect(() => {
     const fetchFriendData = async () => {
-      const friendDoc = await getDoc(doc(db, 'users', friendId));
-      if (friendDoc.exists()) {
+      const friendDoc = await firestore().collection('users').doc(friendId).get();
+      if (friendDoc.exists) {
         setFriendName(friendDoc.data().username);
         setFriendProfilePic(friendDoc.data().profilePic);
       }
     };
 
     fetchFriendData();
-    const messagesRef = collection(db, 'chats', chatId, 'messages');
-    const q = query(messagesRef, orderBy('timestamp', 'desc'));
+    const messagesRef = firestore().collection('chats').doc(chatId).collection('messages');
+    const q = messagesRef.orderBy('timestamp', 'desc');
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubscribe = q.onSnapshot((snapshot) => {
       const updatedMessages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).reverse();
       setMessages(updatedMessages);
     });
@@ -120,7 +99,7 @@ export default function ChatScreen({ route, navigation }) {
   const handleSendMessage = async () => {
     if (newMessage.trim() === '' && !image) return;
 
-    const messagesRef = collection(db, 'chats', chatId, 'messages');
+    const messagesRef = firestore().collection('chats').doc(chatId).collection('messages');
     const messageData = {
       sender: user.uid,
       timestamp: new Date(),
@@ -133,13 +112,12 @@ export default function ChatScreen({ route, navigation }) {
     if (image) {
       setUploading(true);
       try {
-        const storage = getStorage();
-        const storageRef = ref(storage, `images/${Date.now()}_${user.uid}.jpg`);
+        const storageRef = storage().ref(`images/${Date.now()}_${user.uid}.jpg`);
         const response = await fetch(image.uri);
         const blob = await response.blob();
 
-        await uploadBytes(storageRef, blob);
-        const downloadURL = await getDownloadURL(storageRef);
+        await storageRef.put(blob);
+        const downloadURL = await storageRef.getDownloadURL();
         messageData.imageUrl = downloadURL;
         setImage(null);
       } catch (error) {
@@ -149,7 +127,7 @@ export default function ChatScreen({ route, navigation }) {
       }
     }
 
-    await addDoc(messagesRef, messageData);
+    await messagesRef.add(messageData);
     setNewMessage('');
   };
 
@@ -175,12 +153,10 @@ export default function ChatScreen({ route, navigation }) {
     }
   };
 
-  // This useEffect will mark the user as not joined when they leave the ChatScreen
   useEffect(() => {
-    const chatDocRef = doc(db, 'chats', chatId);
+    const chatDocRef = firestore().collection('chats').doc(chatId);
 
     const unsubscribe = navigation.addListener('beforeRemove', () => {
-      // Mark the user as not joined when leaving the chat screen
       updateDoc(chatDocRef, {
         [`${user.uid === route.params.friendId ? 'user1Joined' : 'user2Joined'}`]: false,
       });
