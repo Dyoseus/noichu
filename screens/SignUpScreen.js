@@ -12,8 +12,7 @@ import {
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import auth from '@react-native-firebase/auth';
-import { db } from '../firebaseConfig';
-import { doc, setDoc } from 'firebase/firestore';
+import firestore from '@react-native-firebase/firestore';
 
 const countryCodes = [
   { label: 'USA (+1)', value: '+1' },
@@ -58,8 +57,8 @@ export default function SignUpScreen({ navigation }) {
     try {
       const user = auth().currentUser;
       if (user) {
-        const userDocRef = doc(db, 'users', user.uid);
-        await setDoc(userDocRef, {
+        const userDocRef = firestore().collection('users').doc(user.uid);
+        await userDocRef.set({
           phoneNumber: `${countryCode}${phoneNumber}`,
           firstName: firstName,
           birthDate: birthDate,
@@ -186,6 +185,7 @@ export default function SignUpScreen({ navigation }) {
     </KeyboardAvoidingView>
   );
 }
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
