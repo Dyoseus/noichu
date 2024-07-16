@@ -10,7 +10,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import auth from '@react-native-firebase/auth';
+import auth from '../firebaseConfig';
 
 export default function LoginScreen({ navigation }) {
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -24,6 +24,7 @@ export default function LoginScreen({ navigation }) {
       setConfirm(confirmation);
       setStep(2);
     } catch (error) {
+      console.log('Error sending verification code:', error); // Log the error object
       Alert.alert('Error', 'Failed to send verification code. Please try again.');
     }
   };
