@@ -11,14 +11,13 @@ import {
   ScrollView
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
-import auth from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
+import { auth, firestore } from '../firebaseConfig';
 
 const countryCodes = [
   { label: 'USA (+1)', value: '+1' },
   { label: 'UK (+44)', value: '+44' },
   { label: 'Australia (+61)', value: '+61' },
-  // Add more country codes as needed
+
 ];
 
 export default function SignUpScreen({ navigation }) {
