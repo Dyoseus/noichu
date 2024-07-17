@@ -13,16 +13,22 @@ export default function ProfileScreen({ navigation }) {
 
   useEffect(() => {
     const fetchUserData = async () => {
-      const user = auth().currentUser;
-      if (user) {
-        const userDoc = await firestore().collection('users').doc(user.uid).get();
-        if (userDoc.exists) {
-          setFirstName(userDoc.data().firstName);
-          setProfilePic(userDoc.data().profilePic);
+      try {
+        const user = auth().currentUser;
+        if (user) {
+          const userDoc = await firestore().collection('users').doc(user.uid).get();
+          if (userDoc.exists) {
+            setFirstName(userDoc.data().firstName);
+            setProfilePic(userDoc.data().profilePic);
+          } else {
+            console.log('No such document!');
+          }
         }
+      } catch (error) {
+        console.error('Error fetching user data:', error);
       }
     };
-
+  
     fetchUserData();
   }, []);
 
