@@ -49,7 +49,7 @@ exports.findMatch = functions.https.onCall(async (data, context) => {
   // Update user's status
   await db.collection('users').doc(userId).update({ inCall: true });
 
-  return { callDocId };
+  return { callDocId, status: queueSnapshot.empty ? 'waiting' : 'matched' };
 });
 
 exports.leaveCall = functions.https.onCall(async (data, context) => {
@@ -79,3 +79,4 @@ exports.leaveCall = functions.https.onCall(async (data, context) => {
 
   return { success: true };
 });
+

@@ -8,7 +8,6 @@ import { createStackNavigator, TransitionPresets } from '@react-navigation/stack
 import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
 import LoginScreen from './screens/LoginScreen';
 import SignUpScreen from './screens/SignUpScreen';
-import SearchScreen from './screens/SearchScreen';
 import FriendsListScreen from './screens/FriendsListScreen';
 import FriendRequestsScreen from './screens/FriendRequestsScreen';
 import HomeScreen from './screens/HomeScreen';
@@ -64,7 +63,6 @@ function SearchTabNavigator() {
           },
         }}
       >
-        <TopTab.Screen name="Search" component={SearchScreen} />
         <TopTab.Screen name="My Friends">
           {() => <FriendsListScreen refresh={refreshFriends} onFriendRemoved={handleFriendRemoved} />}
         </TopTab.Screen>
