@@ -1,51 +1,79 @@
 // LoginScreen.js
-
 import React, { useState } from 'react';
-import { View, TextInput, StyleSheet, TouchableOpacity, Text } from 'react-native';
+import {
+  View,
+  TextInput,
+  StyleSheet,
+  TouchableOpacity,
+  Text,
+  Alert,
+  ScrollView,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
-import { app } from '../firebaseConfig'; // Make sure you are importing the initialized Firebase app
-
-const auth = getAuth(app);
+import auth from '@react-native-firebase/auth';
 
 export default function LoginScreen({ navigation }) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
+  const [confirm, setConfirm] = useState(null);
+  const [step, setStep] = useState(1);
 
-  const handleLogin = async () => {
+  const handleSendVerificationCode = async () => {
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
-      console.log('LoggedIn with: ', user.email);
+      const confirmation = await auth().signInWithPhoneNumber(phoneNumber);
+      setConfirm(confirmation);
+      setStep(2);
+    } catch (error) {
+      console.log('Error sending verification code:', error); // Log the error object
+      Alert.alert('Error', 'Failed to send verification code. Please try again.');
+    }
+  };
+
+  const handleVerifyCode = async () => {
+    try {
+      await confirm.confirm(verificationCode);
       navigation.navigate('App');
     } catch (error) {
-      alert(error.message);
+      Alert.alert('Error', 'Invalid verification code. Please try again.');
     }
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        placeholderTextColor="#e0e0e0"
-        value={email}
-        onChangeText={setEmail}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Password"
-        placeholderTextColor="#e0e0e0"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-      />
-      <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
-        <Text style={styles.buttonText}>Login</Text>
-      </TouchableOpacity>
-    
+      {step === 1 ? (
+        <ScrollView contentContainerStyle={styles.scrollViewContent}>
+          <Text style={styles.title}>Enter your phone number</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Phone Number (e.g., +1234567890)"
+            placeholderTextColor="#e0e0e0"
+            value={phoneNumber}
+            onChangeText={setPhoneNumber}
+            keyboardType="phone-pad"
+            autoFocus
+          />
+          <TouchableOpacity style={styles.button} onPress={handleSendVerificationCode}>
+            <Text style={styles.buttonText}>Send Code</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      ) : (
+        <ScrollView contentContainerStyle={styles.scrollViewContent}>
+          <Text style={styles.title}>Enter Verification Code</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Verification Code"
+            placeholderTextColor="#e0e0e0"
+            value={verificationCode}
+            onChangeText={setVerificationCode}
+            keyboardType="number-pad"
+          />
+          <TouchableOpacity style={styles.button} onPress={handleVerifyCode}>
+            <Text style={styles.buttonText}>Verify and Log In</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      )}
       <TouchableOpacity style={styles.signUpButton} onPress={() => navigation.navigate('SignUp')}>
-        <Text style={styles.buttonText}>Sign Up</Text>
+        <Text style={styles.buttonText}>New? Sign Up</Text>
       </TouchableOpacity>
     </SafeAreaView>
   );
@@ -58,8 +86,19 @@ const styles = StyleSheet.create({
     padding: 16,
     backgroundColor: '#232323',
   },
+  scrollViewContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    padding: 16,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: 'white',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
   input: {
-    placeholderTextColor: 'white',
     height: 40,
     borderColor: '#2f4f4f',
     borderWidth: 0.5,
@@ -68,7 +107,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     color: 'white',
   },
-  loginButton: {
+  button: {
     backgroundColor: '#2f4f4f',
     padding: 10,
     borderRadius: 5,

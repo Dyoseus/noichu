@@ -3,11 +3,10 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getAuth } from 'firebase/auth';
-import { app } from '../firebaseConfig';
+import auth from '@react-native-firebase/auth';
+import firestore from '@react-native-firebase/firestore';
+import functions from '@react-native-firebase/functions';
 import { RTCPeerConnection, RTCIceCandidate, RTCSessionDescription, mediaDevices, RTCView } from 'react-native-webrtc';
-import { getFirestore, collection, addDoc, query, where, getDocs, updateDoc, deleteDoc, onSnapshot, doc, getDoc } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
 import { useNavigation } from '@react-navigation/native';
 
 const configuration = { "iceServers": [{ "urls": "stun:stun.l.google.com:19302" }] };
@@ -28,8 +27,7 @@ export default function VideoCallScreen() {
   const navigation = useNavigation();
 
   useEffect(() => {
-    const auth = getAuth();
-    const user = auth.currentUser;
+    const user = auth().currentUser;
     if (user) {
       setUserId(user.uid);
     }
@@ -113,8 +111,7 @@ export default function VideoCallScreen() {
 
     setInQueue(true);
     try {
-      const functions = getFunctions(app);
-      const findMatch = httpsCallable(functions, 'findMatch');
+      const findMatch = functions().httpsCallable('findMatch');
       const result = await findMatch();
       const { callDocId } = result.data;
 
@@ -130,9 +127,8 @@ export default function VideoCallScreen() {
   };
 
   const setupCall = async (callDocId, pc) => {
-    const db = getFirestore();
-    const callDoc = doc(db, 'queue', callDocId);
-    const callData = (await getDoc(callDoc)).data();
+    const callDoc = firestore().collection('queue').doc(callDocId);
+    const callData = (await callDoc.get()).data();
 
     if (callData.status === 'matched') {
       await fetchAndSetOtherUserInfo(callData.matchedUserId);
@@ -144,9 +140,8 @@ export default function VideoCallScreen() {
 
   const fetchAndSetOtherUserInfo = async (otherUserId) => {
     try {
-      const db = getFirestore();
-      const userDoc = await getDoc(doc(db, 'users', otherUserId));
-      if (userDoc.exists()) {
+      const userDoc = await firestore().collection('users').doc(otherUserId).get();
+      if (userDoc.exists) {
         const userData = userDoc.data();
         setOtherUsername(userData.username);
         setOtherUserProfilePic(userData.profilePic);
@@ -157,14 +152,13 @@ export default function VideoCallScreen() {
   };
 
   const createOffer = async (callId, pc) => {
-    const db = getFirestore();
-    const callDoc = doc(db, 'queue', callId);
-    const offerCandidates = collection(callDoc, 'offerCandidates');
-    const answerCandidates = collection(callDoc, 'answerCandidates');
+    const callDoc = firestore().collection('queue').doc(callId);
+    const offerCandidates = callDoc.collection('offerCandidates');
+    const answerCandidates = callDoc.collection('answerCandidates');
 
     pc.onicecandidate = event => {
       if (event.candidate) {
-        addDoc(offerCandidates, event.candidate.toJSON());
+        offerCandidates.add(event.candidate.toJSON());
       }
     };
 
@@ -176,9 +170,9 @@ export default function VideoCallScreen() {
       type: offerDescription.type,
     };
 
-    await updateDoc(callDoc, { offer });
+    await callDoc.update({ offer });
 
-    onSnapshot(callDoc, (snapshot) => {
+    callDoc.onSnapshot((snapshot) => {
       const data = snapshot.data();
       if (!pc.currentRemoteDescription && data?.answer) {
         const answerDescription = new RTCSessionDescription(data.answer);
@@ -190,7 +184,7 @@ export default function VideoCallScreen() {
       }
     });
 
-    onSnapshot(answerCandidates, snapshot => {
+    answerCandidates.onSnapshot(snapshot => {
       snapshot.docChanges().forEach(change => {
         if (change.type === 'added') {
           const candidate = new RTCIceCandidate(change.doc.data());
@@ -203,20 +197,19 @@ export default function VideoCallScreen() {
   };
 
   const answerCall = async (callId, pc) => {
-    const db = getFirestore();
-    const callDoc = doc(db, 'queue', callId);
-    const offerCandidates = collection(callDoc, 'offerCandidates');
-    const answerCandidates = collection(callDoc, 'answerCandidates');
+    const callDoc = firestore().collection('queue').doc(callId);
+    const offerCandidates = callDoc.collection('offerCandidates');
+    const answerCandidates = callDoc.collection('answerCandidates');
 
     pc.onicecandidate = event => {
       if (event.candidate) {
-        addDoc(answerCandidates, event.candidate.toJSON());
+        answerCandidates.add(event.candidate.toJSON());
       }
     };
 
     try {
-      const callSnapshot = await getDoc(callDoc);
-      if (!callSnapshot.exists()) {
+      const callSnapshot = await callDoc.get();
+      if (!callSnapshot.exists) {
         throw new Error('Call document does not exist');
       }
 
@@ -240,9 +233,9 @@ export default function VideoCallScreen() {
         sdp: answerDescription.sdp,
       };
 
-      await updateDoc(callDoc, { answer });
+      await callDoc.update({ answer });
 
-      onSnapshot(offerCandidates, snapshot => {
+      offerCandidates.onSnapshot(snapshot => {
         snapshot.docChanges().forEach(change => {
           if (change.type === 'added') {
             const candidate = new RTCIceCandidate(change.doc.data());
@@ -262,29 +255,28 @@ export default function VideoCallScreen() {
     if (leavingCall) return;
     setLeavingCall(true);
     console.log('Attempting to leave call:', { callDocId, peerConnection });
-  
+
     try {
       if (!callDocId) {
         console.warn('No active call to leave');
         resetState();
         return;
       }
-  
-      const functions = getFunctions(app);
-      const leaveCall = httpsCallable(functions, 'leaveCall');
+
+      const leaveCall = functions().httpsCallable('leaveCall');
       await leaveCall({ callDocId });
-  
+
       // Clean up local resources
       cleanupResources();
-  
+
       // Reset state
       resetState();
-  
+
     } catch (error) {
       console.error('Error leaving call:', error);
       // Log the full error object for debugging
       console.log('Full error object:', JSON.stringify(error, null, 2));
-      
+
       // Handle specific error types
       if (error.code === 'not-found') {
         console.warn('Call document not found. It may have already been cleaned up.');
@@ -296,7 +288,7 @@ export default function VideoCallScreen() {
       setLeavingCall(false);
     }
   };
-  
+
   const cleanupResources = () => {
     if (localStream) {
       localStream.getTracks().forEach(track => track.stop());
@@ -308,7 +300,7 @@ export default function VideoCallScreen() {
       peerConnection.close();
     }
   };
-  
+
   const resetState = () => {
     setPeerConnection(null);
     setLocalStream(null);
@@ -321,10 +313,9 @@ export default function VideoCallScreen() {
   };
 
   const listenForCallEnd = (callId) => {
-    const db = getFirestore();
-    const callDoc = doc(db, 'queue', callId);
+    const callDoc = firestore().collection('queue').doc(callId);
 
-    onSnapshot(callDoc, (snapshot) => {
+    callDoc.onSnapshot((snapshot) => {
       const data = snapshot.data();
       if (data && data.status === 'ended') {
         handleLeaveCall();
