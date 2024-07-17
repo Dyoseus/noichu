@@ -1,3 +1,5 @@
+// VideoCallScreen.js
+
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -170,7 +172,7 @@ export default function VideoCallScreen() {
 
     await callDoc.update({ offer });
 
-    onSnapshot(callDoc, (snapshot) => {
+    callDoc.onSnapshot((snapshot) => {
       const data = snapshot.data();
       if (!pc.currentRemoteDescription && data?.answer) {
         const answerDescription = new RTCSessionDescription(data.answer);
@@ -182,7 +184,7 @@ export default function VideoCallScreen() {
       }
     });
 
-    onSnapshot(answerCandidates, snapshot => {
+    answerCandidates.onSnapshot(snapshot => {
       snapshot.docChanges().forEach(change => {
         if (change.type === 'added') {
           const candidate = new RTCIceCandidate(change.doc.data());
@@ -207,7 +209,7 @@ export default function VideoCallScreen() {
 
     try {
       const callSnapshot = await callDoc.get();
-      if (!callSnapshot.exists()) {
+      if (!callSnapshot.exists) {
         throw new Error('Call document does not exist');
       }
 
@@ -233,7 +235,7 @@ export default function VideoCallScreen() {
 
       await callDoc.update({ answer });
 
-      onSnapshot(offerCandidates, snapshot => {
+      offerCandidates.onSnapshot(snapshot => {
         snapshot.docChanges().forEach(change => {
           if (change.type === 'added') {
             const candidate = new RTCIceCandidate(change.doc.data());
@@ -253,28 +255,28 @@ export default function VideoCallScreen() {
     if (leavingCall) return;
     setLeavingCall(true);
     console.log('Attempting to leave call:', { callDocId, peerConnection });
-  
+
     try {
       if (!callDocId) {
         console.warn('No active call to leave');
         resetState();
         return;
       }
-  
+
       const leaveCall = functions().httpsCallable('leaveCall');
       await leaveCall({ callDocId });
-  
+
       // Clean up local resources
       cleanupResources();
-  
+
       // Reset state
       resetState();
-  
+
     } catch (error) {
       console.error('Error leaving call:', error);
       // Log the full error object for debugging
       console.log('Full error object:', JSON.stringify(error, null, 2));
-      
+
       // Handle specific error types
       if (error.code === 'not-found') {
         console.warn('Call document not found. It may have already been cleaned up.');
@@ -286,7 +288,7 @@ export default function VideoCallScreen() {
       setLeavingCall(false);
     }
   };
-  
+
   const cleanupResources = () => {
     if (localStream) {
       localStream.getTracks().forEach(track => track.stop());
@@ -298,7 +300,7 @@ export default function VideoCallScreen() {
       peerConnection.close();
     }
   };
-  
+
   const resetState = () => {
     setPeerConnection(null);
     setLocalStream(null);
@@ -313,7 +315,7 @@ export default function VideoCallScreen() {
   const listenForCallEnd = (callId) => {
     const callDoc = firestore().collection('queue').doc(callId);
 
-    onSnapshot(callDoc, (snapshot) => {
+    callDoc.onSnapshot((snapshot) => {
       const data = snapshot.data();
       if (data && data.status === 'ended') {
         handleLeaveCall();
