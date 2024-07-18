@@ -1,42 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Image, TextInput, Modal, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getAuth, signOut } from 'firebase/auth';
 import { getFirestore, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import * as ImagePicker from 'expo-image-picker';
 import { app } from '../firebaseConfig';
-import { ScrollView } from 'react-native-gesture-handler';
 
 const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
-
-const SECTIONS = [
-  {
-    header: 'Personal Info',
-    fields: {
-      name: '',
-      gender: '',
-      location: '',
-      age: '', // New field
-      sexualOrientation: '', // New field
-      hobbies: '' // New field
-    }
-  },
-  {
-    header: 'Preferences',
-    fields: {
-      meet: [],
-      find: [],
-      ageRange: {
-        min: '',
-        max: ''
-      },
-      locationRadius: ''
-    }
-  }
-];
 
 export default function ProfileScreen({ navigation }) {
   const [username, setUsername] = useState('');
@@ -44,14 +17,15 @@ export default function ProfileScreen({ navigation }) {
   const [uploading, setUploading] = useState(false);
   const [gender, setGender] = useState('');
   const [phone, setPhoneNumber] = useState('');
-  const [meet, setMeet] = useState('');
-  const [find, setFind] = useState('');
-  const [ageRange, setAgeRange] = useState('');
+  const [meet, setMeet] = useState([]);
+  const [find, setFind] = useState([]);
+  const [ageRange, setAgeRange] = useState({ min: '', max: '' });
   const [location, setLocation] = useState('');
   const [locationRadius, setLocationRadius] = useState('');
-  const [age, setAge] = useState(''); // New state variable
-  const [sexualOrientation, setSexualOrientation] = useState(''); // New state variable
-  const [hobbies, setHobbies] = useState(''); // New state variable
+  const [age, setAge] = useState(''); // Remove default value
+  const [sexualOrientation, setSexualOrientation] = useState(''); // Remove default value
+  const [hobbies, setHobbies] = useState([]); // Remove default value
+  const [modalVisible, setModalVisible] = useState(false); // State to manage modal visibility
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -59,18 +33,19 @@ export default function ProfileScreen({ navigation }) {
       if (user) {
         const userDoc = await getDoc(doc(db, 'users', user.uid));
         if (userDoc.exists()) {
-          setUsername(userDoc.data().username);
-          setProfilePic(userDoc.data().profilePic);
-          setGender(userDoc.data().gender);
-          setPhoneNumber(userDoc.data().phone);
-          setAgeRange(userDoc.data().ageRange);
-          setMeet(userDoc.data().meet);
-          setFind(userDoc.data().find);
-          setLocation(userDoc.data().location);
-          setLocationRadius(userDoc.data().locationRadius);
-          setAge(userDoc.data().age || ''); // New field handling
-          setSexualOrientation(userDoc.data().sexualOrientation || ''); // New field handling
-          setHobbies(userDoc.data().hobbies || ''); // New field handling
+          const userData = userDoc.data();
+          setUsername(userData.username || '');
+          setProfilePic(userData.profilePic || null);
+          setGender(userData.gender || '');
+          setPhoneNumber(userData.phone || '');
+          setMeet(userData.meet || []);
+          setFind(userData.find || []);
+          setAgeRange(userData.ageRange || { min: '', max: '' });
+          setLocation(userData.location || '');
+          setLocationRadius(userData.locationRadius || '');
+          setAge(userData.age || ''); // Apply default only if no value
+          setSexualOrientation(userData.sexualOrientation || ''); // Apply default only if no value
+          setHobbies(userData.hobbies || []); // Apply default only if no value
         }
       }
     };
@@ -82,6 +57,7 @@ export default function ProfileScreen({ navigation }) {
     try {
       await signOut(auth);
       navigation.navigate('Auth');
+      // Navigate to login screen or any other screen
     } catch (error) {
       alert(error.message);
     }
@@ -150,10 +126,29 @@ export default function ProfileScreen({ navigation }) {
     }
   };
 
-  const editProfile = async () => {
+  const openEditModal = () => {
+    setModalVisible(true);
+  };
+
+  const closeEditModal = () => {
+    setModalVisible(false);
+  };
+
+  const saveProfile = async (updatedProfile) => {
     try {
-      await alert("editProfile");
-      navigation.navigate('Auth');
+      await updateDoc(doc(db, 'users', auth.currentUser.uid), updatedProfile);
+      setUsername(updatedProfile.username || '');
+      setGender(updatedProfile.gender || '');
+      setPhoneNumber(updatedProfile.phone || '');
+      setMeet(updatedProfile.meet || []);
+      setFind(updatedProfile.find || []);
+      setAgeRange(updatedProfile.ageRange || { min: '', max: '' });
+      setLocation(updatedProfile.location || '');
+      setLocationRadius(updatedProfile.locationRadius || '');
+      setAge(updatedProfile.age || '');
+      setSexualOrientation(updatedProfile.sexualOrientation || '');
+      setHobbies(updatedProfile.hobbies || []);
+      setModalVisible(false);
     } catch (error) {
       alert(error.message);
     }
@@ -178,9 +173,39 @@ export default function ProfileScreen({ navigation }) {
           <Text style={styles.logoutButtonText}>Logout</Text>
         </Pressable>
 
-        <Pressable style={styles.editProfileButton} onPress={editProfile}>
+        <Pressable style={styles.editProfileButton} onPress={openEditModal}>
           <Text style={styles.editProfileButtonText}>Edit Profile</Text>
         </Pressable>
+
+        {/* Modal for Edit Profile */}
+        <Modal
+          animationType="slide"
+          transparent={true}
+          visible={modalVisible}
+          onRequestClose={closeEditModal}
+        >
+          <View style={styles.modalContainer}>
+            <View style={styles.modalContent}>
+              <ScrollView>
+                <EditProfileForm
+                  username={username}
+                  gender={gender}
+                  phone={phone}
+                  age={age}
+                  sexualOrientation={sexualOrientation}
+                  hobbies={hobbies}
+                  meet={meet}
+                  find={find}
+                  ageRange={ageRange}
+                  location={location}
+                  locationRadius={locationRadius}
+                  onCancel={closeEditModal}
+                  onSave={saveProfile}
+                />
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
 
         <View>
           {/* Personal Information Section */}
@@ -188,20 +213,179 @@ export default function ProfileScreen({ navigation }) {
           <Text>Name: {username}</Text>
           <Text>Phone: {phone}</Text>
           <Text>Gender: {gender}</Text>
-          <Text>Age: {age}</Text> 
-          <Text>Sexual Orientation: {sexualOrientation}</Text> 
-          <Text>Hobbies: {hobbies}</Text> 
+          <Text>Age: {age}</Text>
+          <Text>Sexual Orientation: {sexualOrientation}</Text>
+          <Text>Hobbies: {hobbies.join(', ')}</Text>
+          <Text>Location: {location}</Text>
 
           {/* Preference Information */}
           <Text style={styles.infoTitle}>Preferences</Text>
-          <Text>Meet: {meet}</Text>
-          <Text>Find: {find}</Text>
-          <Text>Age Range of Interests: {ageRange}</Text>
+          <Text>Meet: {meet.join(', ')}</Text>
+          <Text>Find: {find.join(', ')}</Text>
+          <Text>Age Range of Interests: {ageRange.min} - {ageRange.max}</Text>
+          <Text>Location Radius: {locationRadius}</Text>
         </View>
       </ScrollView>
     </SafeAreaView>
   );
 }
+
+const EditProfileForm = ({
+  username,
+  gender,
+  phone,
+  age,
+  sexualOrientation,
+  hobbies,
+  meet,
+  find,
+  ageRange,
+  location,
+  locationRadius,
+  onCancel,
+  onSave,
+}) => {
+  const [newUsername, setNewUsername] = useState(username);
+  const [newGender, setNewGender] = useState(gender);
+  const [newPhone, setNewPhone] = useState(phone);
+  const [newAge, setNewAge] = useState(age);
+  const [newSexualOrientation, setNewSexualOrientation] = useState(sexualOrientation);
+  const [newHobbies, setNewHobbies] = useState(hobbies.join(', '));
+  const [newMeet, setNewMeet] = useState(meet.join(', '));
+  const [newFind, setNewFind] = useState(find.join(', '));
+  const [newMinAge, setNewMinAge] = useState(ageRange.min);
+  const [newMaxAge, setNewMaxAge] = useState(ageRange.max);
+  const [newLocation, setNewLocation] = useState(location);
+  const [newLocationRadius, setNewLocationRadius] = useState(locationRadius);
+
+  const handleSave = () => {
+    onSave({
+      username: newUsername,
+      gender: newGender,
+      phone: newPhone,
+      age: newAge,
+      sexualOrientation: newSexualOrientation,
+      hobbies: newHobbies.split(',').map(item => item.trim()),
+      meet: newMeet.split(',').map(item => item.trim()),
+      find: newFind.split(',').map(item => item.trim()),
+      ageRange: { min: newMinAge, max: newMaxAge },
+      location: newLocation,
+      locationRadius: newLocationRadius,
+    });
+  };
+
+  return (
+    <View style={styles.editProfileForm}>
+      <Text>Username</Text>
+      <TextInput
+        style={styles.input}
+        value={newUsername}
+        onChangeText={setNewUsername}
+        placeholder="Enter username"
+      />
+
+      <Text>Gender</Text>
+      <TextInput
+        style={styles.input}
+        value={newGender}
+        onChangeText={setNewGender}
+        placeholder="Enter gender"
+      />
+
+      <Text>Phone Number</Text>
+      <TextInput
+        style={styles.input}
+        value={newPhone}
+        onChangeText={setNewPhone}
+        placeholder="Enter phone number"
+        keyboardType="phone-pad"
+      />
+
+      <Text>Age</Text>
+      <TextInput
+        style={styles.input}
+        value={newAge}
+        onChangeText={setNewAge}
+        placeholder="Enter age"
+        keyboardType="numeric"
+      />
+
+      <Text>Sexual Orientation</Text>
+      <TextInput
+        style={styles.input}
+        value={newSexualOrientation}
+        onChangeText={setNewSexualOrientation}
+        placeholder="Enter sexual orientation"
+      />
+
+      <Text>Hobbies</Text>
+      <TextInput
+        style={styles.input}
+        value={newHobbies}
+        onChangeText={setNewHobbies}
+        placeholder="Enter hobbies"
+      />
+
+      <Text>Meet Preferences (comma separated)</Text>
+      <TextInput
+        style={styles.input}
+        value={newMeet}
+        onChangeText={setNewMeet}
+        placeholder="Enter meet preferences"
+      />
+
+      <Text>Find Preferences (comma separated)</Text>
+      <TextInput
+        style={styles.input}
+        value={newFind}
+        onChangeText={setNewFind}
+        placeholder="Enter find preferences"
+      />
+
+      <Text>Minimum Age</Text>
+      <TextInput
+        style={styles.input}
+        value={newMinAge}
+        onChangeText={setNewMinAge}
+        placeholder="Enter minimum age"
+        keyboardType="numeric"
+      />
+
+      <Text>Maximum Age</Text>
+      <TextInput
+        style={styles.input}
+        value={newMaxAge}
+        onChangeText={setNewMaxAge}
+        placeholder="Enter maximum age"
+        keyboardType="numeric"
+      />
+
+      <Text>Location</Text>
+      <TextInput
+        style={styles.input}
+        value={newLocation}
+        onChangeText={setNewLocation}
+        placeholder="Enter location"
+      />
+
+      <Text>Location Radius</Text>
+      <TextInput
+        style={styles.input}
+        value={newLocationRadius}
+        onChangeText={setNewLocationRadius}
+        placeholder="Enter location radius"
+        keyboardType="numeric"
+      />
+
+      <Pressable style={styles.saveButton} onPress={handleSave}>
+        <Text style={styles.saveButtonText}>Save</Text>
+      </Pressable>
+      <Pressable style={styles.cancelButton} onPress={onCancel}>
+        <Text style={styles.cancelButtonText}>Cancel</Text>
+      </Pressable>
+    </View>
+  );
+};
 
 const styles = StyleSheet.create({
   container: {
@@ -221,6 +405,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     backgroundColor: '#ff4444',
     borderRadius: 4,
+    marginTop: 20,
   },
   logoutButtonText: {
     color: '#fff',
@@ -231,6 +416,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     backgroundColor: '#ff4444',
     borderRadius: 4,
+    marginTop: 10,
   },
   editProfileButtonText: {
     color: '#fff',
@@ -257,6 +443,61 @@ const styles = StyleSheet.create({
   },
   infoTitle: {
     fontSize: 20,
-    fontWeight: 'bold'
+    fontWeight: 'bold',
+    marginTop: 20,
+  },
+  editProfileForm: {
+    width: '100%',
+    paddingHorizontal: 20,
+    marginTop: 20,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 15,
+    fontSize: 16,
+  },
+  saveButton: {
+    backgroundColor: '#ff4444',
+    paddingVertical: 12,
+    borderRadius: 5,
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  saveButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  cancelButton: {
+    backgroundColor: '#ccc',
+    paddingVertical: 12,
+    borderRadius: 5,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  cancelButtonText: {
+    color: '#333',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)', // Semi-transparent background
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    padding: 20,
+    borderRadius: 10,
+    width: '80%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    maxHeight: '80%', // Limit the height of the modal content
   },
 });
+
