@@ -1,18 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Image, TextInput, Modal, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getAuth, signOut } from 'firebase/auth';
-import { getFirestore, doc, getDoc, updateDoc } from 'firebase/firestore';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import auth from '@react-native-firebase/auth';
+import firestore from '@react-native-firebase/firestore';
+import storage from '@react-native-firebase/storage';
 import * as ImagePicker from 'expo-image-picker';
-import { app } from '../firebaseConfig';
-
-const auth = getAuth(app);
-const db = getFirestore(app);
-const storage = getStorage(app);
 
 export default function ProfileScreen({ navigation }) {
-  const [username, setUsername] = useState('');
+  const [firstName, setFirstName] = useState('');
   const [profilePic, setProfilePic] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [gender, setGender] = useState('');
@@ -47,6 +42,8 @@ export default function ProfileScreen({ navigation }) {
           setSexualOrientation(userData.sexualOrientation || ''); // Apply default only if no value
           setHobbies(userData.hobbies || []); // Apply default only if no value
         }
+      } catch (error) {
+        console.error('Error fetching user data:', error);
       }
     };
 
@@ -55,7 +52,7 @@ export default function ProfileScreen({ navigation }) {
 
   const handleLogout = async () => {
     try {
-      await signOut(auth);
+      await auth().signOut();
       navigation.navigate('Auth');
       // Navigate to login screen or any other screen
     } catch (error) {
@@ -394,7 +391,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#fff',
   },
-  username: {
+  firstName: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#ff4444',

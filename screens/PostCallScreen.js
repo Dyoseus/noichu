@@ -1,10 +1,14 @@
+// PostCallScreen.js
+
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 
 export default function PostCallScreen() {
   const navigation = useNavigation();
+  const route = useRoute();
+  const { userId } = route.params; // Retrieve the userId parameter
 
   const handleGoBack = () => {
     // navigates to video tab
@@ -14,7 +18,7 @@ export default function PostCallScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        <Text style={styles.message}>The call has ended.</Text>
+        <Text style={styles.message}>Your call with {userId} has ended.</Text>
         <Pressable
           style={[styles.button, styles.goBackButton]}
           onPress={handleGoBack}

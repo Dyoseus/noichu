@@ -1,79 +1,53 @@
-// FriendsListScreen.js
 import React, { useState, useEffect } from 'react';
 import { View, Text, FlatList, StyleSheet, TouchableOpacity, Modal, Button } from 'react-native';
-import { getFirestore, collection, query, where, getDocs, doc, getDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
-import { getAuth } from 'firebase/auth';
-import { app } from '../firebaseConfig';
-
-const db = getFirestore(app);
-const auth = getAuth(app);
+import firestore from '@react-native-firebase/firestore';
+import auth from '@react-native-firebase/auth';
 
 export default function FriendsListScreen({ refresh, onFriendRemoved }) {
   const [friends, setFriends] = useState([]);
   const [selectedFriend, setSelectedFriend] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
-  const currentUser = auth.currentUser;
+  const [currentUser, setCurrentUser] = useState(null);
 
   useEffect(() => {
+    const unsubscribe = auth().onAuthStateChanged((user) => {
+      setCurrentUser(user);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!currentUser) return;
+
     const fetchFriends = async () => {
-      if (!currentUser) return;
-  
-      const q1 = query(collection(db, 'friends'), where('user1', '==', currentUser.uid), where('status', '==', 'accepted'));
-      const q2 = query(collection(db, 'friends'), where('user2', '==', currentUser.uid), where('status', '==', 'accepted'));
-      const [snapshot1, snapshot2] = await Promise.all([getDocs(q1), getDocs(q2)]);
+      const friendsQuery1 = firestore().collection('friends')
+        .where('user1', '==', currentUser.uid)
+        .where('status', '==', 'accepted');
+      const friendsQuery2 = firestore().collection('friends')
+        .where('user2', '==', currentUser.uid)
+        .where('status', '==', 'accepted');
+      
+      const [snapshot1, snapshot2] = await Promise.all([friendsQuery1.get(), friendsQuery2.get()]);
       const friendsList = [];
-  
-      // Using for...of loop for snapshot1
-      for (const docSnapshot of snapshot1.docs) {
-        const friendData = docSnapshot.data();
-        const friendDoc = doc(db, 'users', friendData.user2);
-        const friendDocSnapshot = await getDoc(friendDoc);
-        if (friendDocSnapshot.exists()) {
-          friendsList.push({
-            id: friendData.user2,
-            username: friendDocSnapshot.data().username,
-          });
-        }
-      }
-  
-      // Using for...of loop for snapshot2
-      for (const docSnapshot of snapshot2.docs) {
-        const friendData = docSnapshot.data();
-        const friendDoc = doc(db, 'users', friendData.user1);
-        const friendDocSnapshot = await getDoc(friendDoc);
-        if (friendDocSnapshot.exists()) {
-          friendsList.push({
-            id: friendData.user1,
-            username: friendDocSnapshot.data().username,
-          });
-        }
-      }
-  
-      setFriends(friendsList);
+
+      snapshot1.forEach(docSnapshot => friendsList.push(docSnapshot.data().user2));
+      snapshot2.forEach(docSnapshot => friendsList.push(docSnapshot.data().user1));
+
+      const friendDetailsPromises = friendsList.map(friendId => 
+        firestore().collection('users').doc(friendId).get()
+      );
+      const friendDetailsSnapshots = await Promise.all(friendDetailsPromises);
+
+      const updatedFriends = friendDetailsSnapshots.map(doc => ({
+        id: doc.id,
+        phoneNumber: doc.data().phoneNumber,
+      }));
+
+      setFriends(updatedFriends);
     };
-  
+
     fetchFriends();
   }, [currentUser, refresh]);
-
-  useEffect(() => {
-    const q = query(collection(db, 'friends'), where('user1', '==', currentUser.uid), where('status', '==', 'accepted'));
-    const unsubscribe = onSnapshot(q, async (snapshot) => {
-      const friendsList = [];
-      for (const docSnapshot of snapshot.docs) {
-        const friendData = docSnapshot.data();
-        const friendDoc = await getDoc(doc(db, 'users', friendData.user2));
-        if (friendDoc.exists()) {
-          friendsList.push({
-            id: friendData.user2,
-            username: friendDoc.data().username,
-          });
-        }
-      }
-      setFriends(friendsList);
-    });
-
-    return () => unsubscribe();
-  }, [currentUser]);
 
   const handleRemoveButtonPress = (friend) => {
     setSelectedFriend(friend);
@@ -84,9 +58,7 @@ export default function FriendsListScreen({ refresh, onFriendRemoved }) {
     if (!selectedFriend) return;
 
     try {
-      // Removes friend relationship
-      await deleteDoc(doc(db, 'friends', `${currentUser.uid}_${selectedFriend.id}`));
-
+      await firestore().collection('friends').doc(`${currentUser.uid}_${selectedFriend.id}`).delete();
       setFriends(friends.filter(friend => friend.id !== selectedFriend.id));
       setModalVisible(false);
       setSelectedFriend(null);
@@ -124,7 +96,7 @@ export default function FriendsListScreen({ refresh, onFriendRemoved }) {
       {selectedFriend && (
         <Modal
           animationType="slide"
-          transparent={true}
+          transparent
           visible={modalVisible}
           onRequestClose={closeModal}
         >
