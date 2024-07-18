@@ -84,12 +84,11 @@ function AppTabs() {
         tabBarInactiveTintColor: 'white',
         tabBarLabelStyle: { fontSize: 12, fontWeight: 'bold' },
         tabBarStyle: { backgroundColor: '#2f4f4f' },
-        headerShown: true, // Hide header for bottom tabs   was false
+        headerShown: false, // Hide header for bottom tabs   was false
       }}
     >
       <Tab.Screen name="Friends" component={SearchTabNavigator} />
       <Tab.Screen name="Video" component={VideoCallScreen} />
-      <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Messages" component={MessageScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>

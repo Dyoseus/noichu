@@ -1,3 +1,5 @@
+//profile scren
+
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Image, TextInput, Modal, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,7 +9,7 @@ import storage from '@react-native-firebase/storage';
 import * as ImagePicker from 'expo-image-picker';
 
 export default function ProfileScreen({ navigation }) {
-  const [firstName, setFirstName] = useState('');
+  const [firstName, setFirstName] = useState(null);
   const [profilePic, setProfilePic] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [gender, setGender] = useState('');
@@ -30,7 +32,7 @@ export default function ProfileScreen({ navigation }) {
         const userDoc = await firestore().collection('users').doc(user.uid).get();
           if (userDoc.exists()) {
             const userData = userDoc.data();
-            setFirstName(userData.firstName || '');
+            setFirstName(userDoc.data().firstName);
             setProfilePic(userData.profilePic || null);
             setGender(userData.gender || '');
             setPhoneNumber(userData.phone || '');
@@ -165,7 +167,9 @@ export default function ProfileScreen({ navigation }) {
           )}
         </Pressable>
 
-        <Text style={styles.firstName}>{firstName ? `Welcome, ${firstName}` : 'Loading...'}</Text>
+        <Text style={styles.firstName}>
+  {firstName === null ? 'Loading...' : `Welcome, ${firstName}`}
+</Text>
         {uploading && <Text>Uploading...</Text>}
         <Pressable style={styles.logoutButton} onPress={handleLogout}>
           <Text style={styles.logoutButtonText}>Logout</Text>
