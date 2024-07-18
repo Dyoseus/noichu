@@ -27,10 +27,10 @@ export default function ProfileScreen({ navigation }) {
       const user = auth.currentUser;
       try{
       if (user) {
-          const userDoc = await getDoc(doc(db, 'users', user.uid));
+        const userDoc = await firestore().collection('users').doc(user.uid).get();
           if (userDoc.exists()) {
             const userData = userDoc.data();
-            setUsername(userData.username || '');
+            setFirstName(userData.firstName || '');
             setProfilePic(userData.profilePic || null);
             setGender(userData.gender || '');
             setPhoneNumber(userData.phone || '');
@@ -135,8 +135,8 @@ export default function ProfileScreen({ navigation }) {
 
   const saveProfile = async (updatedProfile) => {
     try {
-      await updateDoc(doc(db, 'users', auth.currentUser.uid), updatedProfile);
-      setUsername(updatedProfile.username || '');
+      await firestore().collection('users').doc(auth().currentUser.uid).update(updatedProfile);
+      setFirstName(updatedProfile.firstName || '');
       setGender(updatedProfile.gender || '');
       setPhoneNumber(updatedProfile.phone || '');
       setMeet(updatedProfile.meet || []);
@@ -166,7 +166,7 @@ export default function ProfileScreen({ navigation }) {
           )}
         </Pressable>
 
-        <Text style={styles.username}>{username ? `Welcome, ${username}` : 'Loading...'}</Text>
+        <Text style={styles.firstName}>{firstName ? `Welcome, ${firstName}` : 'Loading...'}</Text>
         {uploading && <Text>Uploading...</Text>}
         <Pressable style={styles.logoutButton} onPress={handleLogout}>
           <Text style={styles.logoutButtonText}>Logout</Text>
@@ -187,7 +187,7 @@ export default function ProfileScreen({ navigation }) {
             <View style={styles.modalContent}>
               <ScrollView>
                 <EditProfileForm
-                  username={username}
+                  username={firstName}
                   gender={gender}
                   phone={phone}
                   age={age}
@@ -209,7 +209,7 @@ export default function ProfileScreen({ navigation }) {
         <View>
           {/* Personal Information Section */}
           <Text style={styles.infoTitle}>Personal Information</Text>
-          <Text>Name: {username}</Text>
+          <Text>Name: {firstName}</Text>
           <Text>Phone: {phone}</Text>
           <Text>Gender: {gender}</Text>
           <Text>Age: {age}</Text>
@@ -230,7 +230,7 @@ export default function ProfileScreen({ navigation }) {
 }
 
 const EditProfileForm = ({
-  username,
+  firstName,
   gender,
   phone,
   age,
@@ -244,7 +244,7 @@ const EditProfileForm = ({
   onCancel,
   onSave,
 }) => {
-  const [newUsername, setNewUsername] = useState(username);
+  const [newFirstName, setNewFirstName] = useState(firstName);
   const [newGender, setNewGender] = useState(gender);
   const [newPhone, setNewPhone] = useState(phone);
   const [newAge, setNewAge] = useState(age);
@@ -259,7 +259,7 @@ const EditProfileForm = ({
 
   const handleSave = () => {
     onSave({
-      username: newUsername,
+      firstName: newFirstName,
       gender: newGender,
       phone: newPhone,
       age: newAge,
@@ -275,12 +275,12 @@ const EditProfileForm = ({
 
   return (
     <View style={styles.editProfileForm}>
-      <Text>Username</Text>
+      <Text>First Name</Text>
       <TextInput
         style={styles.input}
-        value={newUsername}
-        onChangeText={setNewUsername}
-        placeholder="Enter username"
+        value={newFirstName}
+        onChangeText={setNewFirstName}
+        placeholder="Enter first name"
       />
 
       <Text>Gender</Text>
