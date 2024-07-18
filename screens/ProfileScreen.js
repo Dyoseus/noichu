@@ -25,22 +25,24 @@ export default function ProfileScreen({ navigation }) {
   useEffect(() => {
     const fetchUserData = async () => {
       const user = auth.currentUser;
+      try{
       if (user) {
-        const userDoc = await getDoc(doc(db, 'users', user.uid));
-        if (userDoc.exists()) {
-          const userData = userDoc.data();
-          setUsername(userData.username || '');
-          setProfilePic(userData.profilePic || null);
-          setGender(userData.gender || '');
-          setPhoneNumber(userData.phone || '');
-          setMeet(userData.meet || []);
-          setFind(userData.find || []);
-          setAgeRange(userData.ageRange || { min: '', max: '' });
-          setLocation(userData.location || '');
-          setLocationRadius(userData.locationRadius || '');
-          setAge(userData.age || ''); // Apply default only if no value
-          setSexualOrientation(userData.sexualOrientation || ''); // Apply default only if no value
-          setHobbies(userData.hobbies || []); // Apply default only if no value
+          const userDoc = await getDoc(doc(db, 'users', user.uid));
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            setUsername(userData.username || '');
+            setProfilePic(userData.profilePic || null);
+            setGender(userData.gender || '');
+            setPhoneNumber(userData.phone || '');
+            setMeet(userData.meet || []);
+            setFind(userData.find || []);
+            setAgeRange(userData.ageRange || { min: '', max: '' });
+            setLocation(userData.location || '');
+            setLocationRadius(userData.locationRadius || '');
+            setAge(userData.age || ''); // Apply default only if no value
+            setSexualOrientation(userData.sexualOrientation || ''); // Apply default only if no value
+            setHobbies(userData.hobbies || []); // Apply default only if no value
+          }
         }
       } catch (error) {
         console.error('Error fetching user data:', error);
