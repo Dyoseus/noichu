@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Image, Button } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getAuth, signOut } from 'firebase/auth';
 import { getFirestore, doc, getDoc, updateDoc } from 'firebase/firestore';
@@ -7,7 +7,6 @@ import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import * as ImagePicker from 'expo-image-picker';
 import { app } from '../firebaseConfig';
 import { ScrollView } from 'react-native-gesture-handler';
-import { StatusBar } from 'expo-status-bar';
 
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -15,23 +14,26 @@ const storage = getStorage(app);
 
 const SECTIONS = [
   {
-    header : 'Personal Info',
-    fields : {
-      name : '',
-      gender : '',
-      location : ''
+    header: 'Personal Info',
+    fields: {
+      name: '',
+      gender: '',
+      location: '',
+      age: '', // New field
+      sexualOrientation: '', // New field
+      hobbies: '' // New field
     }
   },
   {
-    header : 'Preferences',
-    fields : {
-      meet : [],
-      find : [],
-      ageRange : {
-        min : '',
-        max : ''
+    header: 'Preferences',
+    fields: {
+      meet: [],
+      find: [],
+      ageRange: {
+        min: '',
+        max: ''
       },
-      locationRadius : ''
+      locationRadius: ''
     }
   }
 ];
@@ -47,7 +49,10 @@ export default function ProfileScreen({ navigation }) {
   const [ageRange, setAgeRange] = useState('');
   const [location, setLocation] = useState('');
   const [locationRadius, setLocationRadius] = useState('');
-  
+  const [age, setAge] = useState(''); // New state variable
+  const [sexualOrientation, setSexualOrientation] = useState(''); // New state variable
+  const [hobbies, setHobbies] = useState(''); // New state variable
+
   useEffect(() => {
     const fetchUserData = async () => {
       const user = auth.currentUser;
@@ -63,10 +68,13 @@ export default function ProfileScreen({ navigation }) {
           setFind(userDoc.data().find);
           setLocation(userDoc.data().location);
           setLocationRadius(userDoc.data().locationRadius);
+          setAge(userDoc.data().age || ''); // New field handling
+          setSexualOrientation(userDoc.data().sexualOrientation || ''); // New field handling
+          setHobbies(userDoc.data().hobbies || ''); // New field handling
         }
       }
     };
-  
+
     fetchUserData();
   }, []);
 
@@ -87,7 +95,7 @@ export default function ProfileScreen({ navigation }) {
       quality: 0.2,
     });
 
-    if (result.canceled) {
+    if (result.cancelled) {
       console.log("Image picker was cancelled");
       return;
     }
@@ -108,40 +116,39 @@ export default function ProfileScreen({ navigation }) {
     setUploading(true);
     const fileName = imageUri.split('/').pop();
 
-    // Check if fileName is defined
     if (!fileName) {
-        console.error("File name could not be determined");
-        alert('File name could not be determined');
-        setUploading(false);
-        return;
+      console.error("File name could not be determined");
+      alert('File name could not be determined');
+      setUploading(false);
+      return;
     }
 
     const fileExtension = fileName.split('.').pop();
-    // Check if fileExtension is defined
+
     if (!fileExtension) {
-        console.error("File extension could not be determined");
-        alert('File extension could not be determined');
-        setUploading(false);
-        return;
+      console.error("File extension could not be determined");
+      alert('File extension could not be determined');
+      setUploading(false);
+      return;
     }
 
     const storageRef = ref(storage, `profilePictures/${auth.currentUser.uid}.${fileExtension}`);
     try {
-        const response = await fetch(imageUri);
-        const blob = await response.blob();
-        await uploadBytes(storageRef, blob);
-        const downloadURL = await getDownloadURL(storageRef);
-        await updateDoc(doc(db, 'users', auth.currentUser.uid), {
-            profilePic: downloadURL,
-        });
-        setProfilePic(downloadURL);
+      const response = await fetch(imageUri);
+      const blob = await response.blob();
+      await uploadBytes(storageRef, blob);
+      const downloadURL = await getDownloadURL(storageRef);
+      await updateDoc(doc(db, 'users', auth.currentUser.uid), {
+        profilePic: downloadURL,
+      });
+      setProfilePic(downloadURL);
     } catch (error) {
-        console.error("Error uploading image: ", error);
-        alert('Error uploading image');
+      console.error("Error uploading image: ", error);
+      alert('Error uploading image');
     } finally {
-        setUploading(false);
+      setUploading(false);
     }
-};
+  };
 
   const editProfile = async () => {
     try {
@@ -164,14 +171,13 @@ export default function ProfileScreen({ navigation }) {
             </View>
           )}
         </Pressable>
-        
+
         <Text style={styles.username}>{username ? `Welcome, ${username}` : 'Loading...'}</Text>
         {uploading && <Text>Uploading...</Text>}
         <Pressable style={styles.logoutButton} onPress={handleLogout}>
           <Text style={styles.logoutButtonText}>Logout</Text>
         </Pressable>
 
-        {/* TODO: make this whole Profile Screen scrollable up and down, include each horizontal section for each customization of interests */}
         <Pressable style={styles.editProfileButton} onPress={editProfile}>
           <Text style={styles.editProfileButtonText}>Edit Profile</Text>
         </Pressable>
@@ -182,23 +188,15 @@ export default function ProfileScreen({ navigation }) {
           <Text>Name: {username}</Text>
           <Text>Phone: {phone}</Text>
           <Text>Gender: {gender}</Text>
-          <Text>location: {find}</Text>
+          <Text>Age: {age}</Text> 
+          <Text>Sexual Orientation: {sexualOrientation}</Text> 
+          <Text>Hobbies: {hobbies}</Text> 
 
-          {/*Preference Information*/}
+          {/* Preference Information */}
           <Text style={styles.infoTitle}>Preferences</Text>
           <Text>Meet: {meet}</Text>
           <Text>Find: {find}</Text>
           <Text>Age Range of Interests: {ageRange}</Text>
-          
-          {/* <Button 
-          title='add'
-          onPress={() => {
-            const newGender = 'e';
-            updateDoc(doc(db, 'users', auth.currentUser.uid), {
-              gender : newGender
-            });
-            setGender(newGender);
-          }}/> */}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -257,7 +255,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
   },
-  infoTitle:{
+  infoTitle: {
     fontSize: 20,
     fontWeight: 'bold'
   },
