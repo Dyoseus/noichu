@@ -35,7 +35,7 @@ export default function ProfileScreen({ navigation }) {
   const handleLogout = async () => {
     try {
       await auth().signOut();
-      navigation.navigate('Auth');
+      navigation.navigate('Welcome');  // Navigate to WelcomeScreen.js
     } catch (error) {
       alert(error.message);
     }

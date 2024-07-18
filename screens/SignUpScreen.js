@@ -8,20 +8,19 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
-  ScrollView
+  ScrollView,
+  Image,
+  Modal,
+  FlatList
 } from 'react-native';
-import { Picker } from '@react-native-picker/picker';
 import { auth, firestore } from '../firebaseConfig';
+import countryCodes from '../constants/countryCodes';
 
-const countryCodes = [
-  { label: 'USA (+1)', value: '+1' },
-  { label: 'UK (+44)', value: '+44' },
-  { label: 'Australia (+61)', value: '+61' },
-
-];
 
 export default function SignUpScreen({ navigation }) {
   const [step, setStep] = useState(1);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [modalVisible, setModalVisible] = useState(false);
   const [countryCode, setCountryCode] = useState('+1');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
@@ -29,6 +28,13 @@ export default function SignUpScreen({ navigation }) {
   const [firstName, setFirstName] = useState('');
   const [birthDate, setBirthDate] = useState('');
   const [gender, setGender] = useState('');
+  const [email, setEmail] = useState('');
+
+
+  const filteredCountryCodes = countryCodes.filter(country => 
+    country.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    country.value.includes(searchQuery)
+  );
 
   const handleSendVerificationCode = async () => {
     try {
@@ -59,13 +65,14 @@ export default function SignUpScreen({ navigation }) {
         const userDocRef = firestore().collection('users').doc(user.uid);
         await userDocRef.set({
           phoneNumber: `${countryCode}${phoneNumber}`,
+          email: email,
           firstName: firstName,
           birthDate: birthDate,
           gender: gender,
         });
         console.log('User created successfully:', user.uid);
         Alert.alert('Success', 'Account created successfully!', [
-          { text: 'OK', onPress: () => navigation.navigate('Login') }
+          { text: 'OK', onPress: () => navigation.navigate('App') }
         ]);
       } else {
         throw new Error('No authenticated user found');
@@ -76,32 +83,81 @@ export default function SignUpScreen({ navigation }) {
     }
   };
 
+  const CountryCodeSelector = ({ selectedCode, onSelect }) => {
+    const [searchQuery, setSearchQuery] = useState('');
+
+    const filteredCountryCodes = countryCodes.filter(country => 
+      country.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      country.value.includes(searchQuery)
+    );
+
+    return (
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Select Country Code</Text>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search country or code"
+              placeholderTextColor="#999"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+            <FlatList
+              data={filteredCountryCodes}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.countryItem}
+                  onPress={() => {
+                    onSelect(item.value);
+                    setModalVisible(false);
+                  }}
+                >
+                  <Text style={styles.countryFlag}>{item.flag}</Text>
+                  <Text style={styles.countryLabel}>{item.label}</Text>
+                  <Text style={styles.countryCode}>{item.value}</Text>
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        </View>
+      </Modal>
+    );
+};
+
   const renderStepOne = () => (
     <ScrollView contentContainerStyle={styles.scrollViewContent}>
       <Text style={styles.title}>Enter your phone number to begin</Text>
-      <View style={styles.pickerContainer}>
-        <Picker
-          selectedValue={countryCode}
-          style={styles.picker}
-          onValueChange={(itemValue) => setCountryCode(itemValue)}
+      <View style={styles.phoneInputContainer}>
+        <TouchableOpacity
+          style={styles.countryCodeButton}
+          onPress={() => setModalVisible(true)}
         >
-          {countryCodes.map((country) => (
-            <Picker.Item key={country.value} label={country.label} value={country.value} />
-          ))}
-        </Picker>
+          <Text style={styles.countryCodeButtonText}>{countryCode}</Text>
+        </TouchableOpacity>
+        <TextInput
+          style={styles.phoneInput}
+          placeholder="Phone Number (e.g. XXXXXXXXXX)"
+          placeholderTextColor="#e0e0e0"
+          value={phoneNumber}
+          onChangeText={setPhoneNumber}
+          keyboardType="phone-pad"
+          autoFocus={true}
+        />
       </View>
-      <TextInput
-        style={styles.input}
-        placeholder="Phone Number (e.g. XXXXXXXXXX)"
-        placeholderTextColor="#e0e0e0"
-        value={phoneNumber}
-        onChangeText={setPhoneNumber}
-        keyboardType="phone-pad"
-        autoFocus={true}
-      />
       <TouchableOpacity style={styles.button} onPress={handleSendVerificationCode}>
         <Text style={styles.buttonText}>Send Code</Text>
       </TouchableOpacity>
+      <CountryCodeSelector
+        selectedCode={countryCode}
+        onSelect={(code) => setCountryCode(code)}
+      />
     </ScrollView>
   );
 
@@ -123,6 +179,23 @@ export default function SignUpScreen({ navigation }) {
   );
 
   const renderStepThree = () => (
+    <ScrollView contentContainerStyle={styles.scrollViewContent}>
+      <Text style={styles.title}>Enter your email in case you lose access</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="Email"
+        placeholderTextColor="#e0e0e0"
+        value={email}
+        onChangeText={setEmail}
+        keyboardType="email-address"
+      />
+      <TouchableOpacity style={styles.button} onPress={() => setStep(4)}>
+        <Text style={styles.buttonText}>Next</Text>
+      </TouchableOpacity>
+    </ScrollView>
+  );
+
+  const renderStepFour = () => (
     <ScrollView contentContainerStyle={styles.scrollViewContent}>
       <Text style={styles.title}>Tell us about yourself</Text>
       <TextInput
@@ -170,6 +243,7 @@ export default function SignUpScreen({ navigation }) {
       case 1: return renderStepOne();
       case 2: return renderStepTwo();
       case 3: return renderStepThree();
+      case 4: return renderStepFour();
       default: return null;
     }
   };
@@ -180,6 +254,9 @@ export default function SignUpScreen({ navigation }) {
       style={styles.container}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 0}
     >
+      <TouchableOpacity style={[styles.backButton, Platform.OS === 'ios' && styles.backButtonIOS]} onPress={() => navigation.goBack()}>
+        <Image source={require('../assets/arrow.png')} style={styles.backButtonImage} />
+      </TouchableOpacity>
       {renderCurrentStep()}
     </KeyboardAvoidingView>
   );
@@ -196,6 +273,16 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: 'center',
     padding: 16,
+  },
+  searchInput: {
+    height: 40,
+    borderColor: '#2f4f4f',
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    marginBottom: 10,
+    color: 'white',
+    backgroundColor: '#333',
   },
   title: {
     fontSize: 24,
@@ -247,5 +334,80 @@ const styles = StyleSheet.create({
   },
   selectedGenderButton: {
     backgroundColor: '#2f4f4f',
+  },
+  backButton: {
+    position: 'absolute',
+    top: 40,
+    left: 20,
+  },
+  backButtonIOS: {
+    top: 60,
+  },
+  backButtonImage: {
+    width: 25,
+    height: 25,
+  },
+  phoneInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  countryCodeButton: {
+    backgroundColor: '#2f4f4f',
+    padding: 10,
+    borderRadius: 5,
+    marginRight: 10,
+  },
+  countryCodeButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+  },
+  phoneInput: {
+    flex: 1,
+    height: 40,
+    borderColor: '#2f4f4f',
+    borderWidth: 0.5,
+    borderRadius: 15,
+    paddingHorizontal: 8,
+    color: 'white',
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalContent: {
+    backgroundColor: '#232323',
+    borderRadius: 10,
+    padding: 20,
+    width: '80%',
+    maxHeight: '80%',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: 'white',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  countryItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2f4f4f',
+  },
+  countryFlag: {
+    fontSize: 24,
+    marginRight: 10,
+  },
+  countryLabel: {
+    flex: 1,
+    color: 'white',
+  },
+  countryCode: {
+    color: 'white',
+    fontWeight: 'bold',
   },
 });

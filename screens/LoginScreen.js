@@ -8,6 +8,7 @@ import {
   Text,
   Alert,
   ScrollView,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import auth from '@react-native-firebase/auth';
@@ -40,6 +41,9 @@ export default function LoginScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
+      <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+        <Image source={require('../assets/arrow.png')} style={styles.backButtonImage} />
+      </TouchableOpacity>
       {step === 1 ? (
         <ScrollView contentContainerStyle={styles.scrollViewContent}>
           <Text style={styles.title}>Enter your phone number</Text>
@@ -123,5 +127,14 @@ const styles = StyleSheet.create({
   buttonText: {
     color: 'white',
     fontWeight: 'bold',
+  },
+  backButton: {
+    position: 'absolute',
+    top: 40,
+    left: 20,
+  },
+  backButtonImage: {
+    width: 25,
+    height: 25,
   },
 });

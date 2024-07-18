@@ -16,6 +16,7 @@ import ChatScreen from './screens/ChatScreen';
 import VideoCallScreen from './screens/VideoCallScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import PostCallScreen from './screens/PostCallScreen';
+import WelcomeScreen from './screens/WelcomeScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -24,6 +25,7 @@ const TopTab = createMaterialTopTabNavigator();
 function AuthStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="Welcome" component={WelcomeScreen} />
       <Stack.Screen name="Login" component={LoginScreen} />
       <Stack.Screen name="SignUp" component={SignUpScreen} />
     </Stack.Navigator>
@@ -82,7 +84,7 @@ function AppTabs() {
         tabBarInactiveTintColor: 'white',
         tabBarLabelStyle: { fontSize: 12, fontWeight: 'bold' },
         tabBarStyle: { backgroundColor: '#2f4f4f' },
-        headerShown: false, // Hide header for bottom tabs
+        headerShown: false,
       }}
     >
       <Tab.Screen name="Friends" component={SearchTabNavigator} />
@@ -101,7 +103,6 @@ export default function App() {
         <Stack.Navigator screenOptions={{ headerShown: false }}>
           <Stack.Screen name="Auth" component={AuthStack} />
           <Stack.Screen name="App" component={AppTabs} />
-          
           <Stack.Screen
             name="Chat"
             component={ChatScreen}
@@ -109,11 +110,11 @@ export default function App() {
               ...TransitionPresets.ModalSlideFromBottomIOS,
             }}
           />
-           <Stack.Screen
-          name="PostCall"
-          component={PostCallScreen}
-          options={{ title: 'Post Call' }}
-        />
+          <Stack.Screen
+            name="PostCall"
+            component={PostCallScreen}
+            options={{ title: 'Post Call' }}
+          />
         </Stack.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>
