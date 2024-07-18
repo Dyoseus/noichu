@@ -27,8 +27,16 @@ export default function SignUpScreen({ navigation }) {
   const [confirm, setConfirm] = useState(null);
   const [firstName, setFirstName] = useState('');
   const [birthDate, setBirthDate] = useState('');
-  const [gender, setGender] = useState('');
   const [email, setEmail] = useState('');
+  const [agreeToTerms, setAgreeToTerms] = useState(false);
+  const [gender, setGender] = useState('');
+  const [sexualOrientation, setSexualOrientation] = useState('');
+  const [interestedIn, setInterestedIn] = useState([]);
+  const [maxDistance, setMaxDistance] = useState(50);
+  const [school, setSchool] = useState('');
+  const [lifestyleHabits, setLifestyleHabits] = useState([]);
+  const [hobbies, setHobbies] = useState([]);
+  const [pictures, setPictures] = useState([]);
 
 
   const filteredCountryCodes = countryCodes.filter(country => 
@@ -197,6 +205,20 @@ export default function SignUpScreen({ navigation }) {
 
   const renderStepFour = () => (
     <ScrollView contentContainerStyle={styles.scrollViewContent}>
+      <Text style={styles.title}>Terms and Conditions</Text>
+      {/* Add your terms and conditions text here */}
+      <TouchableOpacity style={styles.checkbox} onPress={() => setAgreeToTerms(!agreeToTerms)}>
+        <Text style={styles.checkboxText}>I agree to the terms and conditions</Text>
+        {agreeToTerms && <Text style={styles.checkmark}>✓</Text>}
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.button} onPress={() => setStep(6)} disabled={!agreeToTerms}>
+        <Text style={styles.buttonText}>Next</Text>
+      </TouchableOpacity>
+    </ScrollView>
+  );
+
+  const renderStepFive = () => (
+    <ScrollView contentContainerStyle={styles.scrollViewContent}>
       <Text style={styles.title}>Tell us about yourself</Text>
       <TextInput
         style={styles.input}
@@ -238,12 +260,159 @@ export default function SignUpScreen({ navigation }) {
     </ScrollView>
   );
 
+  const renderStepSix = () => (
+    <ScrollView contentContainerStyle={styles.scrollViewContent}>
+      <Text style={styles.title}>What's your first name?</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="First Name"
+        placeholderTextColor="#e0e0e0"
+        value={firstName}
+        onChangeText={setFirstName}
+      />
+      <TouchableOpacity style={styles.button} onPress={() => setStep(7)}>
+        <Text style={styles.buttonText}>Next</Text>
+      </TouchableOpacity>
+    </ScrollView>
+  );
+  
+  const renderStepSeven = () => (
+    <ScrollView contentContainerStyle={styles.scrollViewContent}>
+      <Text style={styles.title}>When's your birthday?</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="Birth Date (YYYY-MM-DD)"
+        placeholderTextColor="#e0e0e0"
+        value={birthDate}
+        onChangeText={setBirthDate}
+      />
+      <TouchableOpacity style={styles.button} onPress={() => setStep(8)}>
+        <Text style={styles.buttonText}>Next</Text>
+      </TouchableOpacity>
+    </ScrollView>
+  );
+  
+  const renderStepEight = () => (
+    <ScrollView contentContainerStyle={styles.scrollViewContent}>
+      <Text style={styles.title}>What's your gender?</Text>
+      {['Woman', 'Man', 'More'].map((option) => (
+        <TouchableOpacity
+          key={option}
+          style={[styles.genderButton, gender === option && styles.selectedGenderButton]}
+          onPress={() => setGender(option)}
+        >
+          <Text style={styles.buttonText}>{option}</Text>
+        </TouchableOpacity>
+      ))}
+      <TouchableOpacity style={styles.button} onPress={() => setStep(9)}>
+        <Text style={styles.buttonText}>Next</Text>
+      </TouchableOpacity>
+    </ScrollView>
+  );
+  
+  const renderStepNine = () => (
+    <ScrollView contentContainerStyle={styles.scrollViewContent}>
+      <Text style={styles.title}>What's your sexual orientation?</Text>
+      {/* Add options for sexual orientation */}
+      <TouchableOpacity style={styles.button} onPress={() => setStep(10)}>
+        <Text style={styles.buttonText}>Next</Text>
+      </TouchableOpacity>
+    </ScrollView>
+  );
+  
+  const renderStepTen = () => (
+    <ScrollView contentContainerStyle={styles.scrollViewContent}>
+      <Text style={styles.title}>Who are you interested in seeing?</Text>
+      {['Women', 'Men', 'Everyone'].map((option) => (
+        <TouchableOpacity
+          key={option}
+          style={[styles.interestButton, interestedIn.includes(option) && styles.selectedInterestButton]}
+          onPress={() => setInterestedIn([...interestedIn, option])}
+        >
+          <Text style={styles.buttonText}>{option}</Text>
+        </TouchableOpacity>
+      ))}
+      <TouchableOpacity style={styles.button} onPress={() => setStep(11)}>
+        <Text style={styles.buttonText}>Next</Text>
+      </TouchableOpacity>
+    </ScrollView>
+  );
+  
+  const renderStepEleven = () => (
+    <ScrollView contentContainerStyle={styles.scrollViewContent}>
+      <Text style={styles.title}>Maximum distance</Text>
+      
+      <Text>{maxDistance} miles</Text>
+      <TouchableOpacity style={styles.button} onPress={() => setStep(12)}>
+        <Text style={styles.buttonText}>Next</Text>
+      </TouchableOpacity>
+    </ScrollView>
+  );
+  
+  const renderStepTwelve = () => (
+    <ScrollView contentContainerStyle={styles.scrollViewContent}>
+      <Text style={styles.title}>What school do you go to? (Optional)</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="School"
+        placeholderTextColor="#e0e0e0"
+        value={school}
+        onChangeText={setSchool}
+      />
+      <TouchableOpacity style={styles.button} onPress={() => setStep(13)}>
+        <Text style={styles.buttonText}>Next</Text>
+      </TouchableOpacity>
+    </ScrollView>
+  );
+  
+  const renderStepThirteen = () => (
+    <ScrollView contentContainerStyle={styles.scrollViewContent}>
+      <Text style={styles.title}>Lifestyle habits (Optional)</Text>
+      {/* Add options for lifestyle habits */}
+      <TouchableOpacity style={styles.button} onPress={() => setStep(14)}>
+        <Text style={styles.buttonText}>Next</Text>
+      </TouchableOpacity>
+    </ScrollView>
+  );
+  
+  const renderStepFourteen = () => (
+    <ScrollView contentContainerStyle={styles.scrollViewContent}>
+      <Text style={styles.title}>Hobbies (Optional)</Text>
+      
+      <TouchableOpacity style={styles.button} onPress={() => setStep(15)}>
+        <Text style={styles.buttonText}>Next</Text>
+      </TouchableOpacity>
+    </ScrollView>
+  );
+  
+  const renderStepFifteen = () => (
+    <ScrollView contentContainerStyle={styles.scrollViewContent}>
+      <Text style={styles.title}>Add at least 2 pictures</Text>
+      
+      <TouchableOpacity style={styles.button} onPress={handleSignUp}>
+        <Text style={styles.buttonText}>Finish Sign Up</Text>
+      </TouchableOpacity>
+    </ScrollView>
+  );
+
   const renderCurrentStep = () => {
     switch (step) {
       case 1: return renderStepOne();
       case 2: return renderStepTwo();
       case 3: return renderStepThree();
       case 4: return renderStepFour();
+      case 5: return renderStepFive();
+      case 6: return renderStepSix(); 
+      case 7: return renderStepSeven();
+      case 8: return renderStepEight();
+      case 9: return renderStepNine();
+      case 10: return renderStepTen();
+      case 11: return renderStepEleven();
+      case 12: return renderStepTwelve();
+      case 13: return renderStepThirteen();
+      case 14: return renderStepFourteen();
+      case 15: return renderStepFifteen();
+
       default: return null;
     }
   };
