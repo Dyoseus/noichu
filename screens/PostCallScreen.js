@@ -1,14 +1,44 @@
 import React from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Animated, PanResponder } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 
 export default function PostCallScreen() {
   const navigation = useNavigation();
+  const swipePanResponder = useRef(null);
 
   const handleGoBack = () => {
     // navigates to video tab
     navigation.navigate('Video'); 
+  };
+
+  const handleSwipeLeft = () => {
+    // Action for swiping left (not matching)
+    console.log('Swiped left');
+  };
+
+  const handleSwipeRight = () => {
+    // Action for swiping right (matching)
+    console.log('Swiped right');
+  };
+
+  const onSwipeStart = () => {
+    // Initialize PanResponder
+    swipePanResponder.current = PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderMove: (event, gestureState) => {
+        // Detect swipe direction
+        if (gestureState.dx > 50) {
+          handleSwipeRight(); // Swipe right action
+        } else if (gestureState.dx < -50) {
+          handleSwipeLeft(); // Swipe left action
+        }
+      },
+      onPanResponderRelease: () => {
+        // Reset any state after swipe release if needed
+      },
+    });
   };
 
   return (
