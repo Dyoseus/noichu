@@ -9,8 +9,6 @@ import functions from '@react-native-firebase/functions';
 import { RTCPeerConnection, RTCIceCandidate, RTCSessionDescription, mediaDevices, RTCView } from 'react-native-webrtc';
 import { useNavigation } from '@react-navigation/native';
 
-const configuration = { "iceServers": [{ "urls": "stun:stun.l.google.com:19302" }] };
-
 export default function VideoCallScreen() {
   const [localStream, setLocalStream] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
@@ -50,6 +48,11 @@ export default function VideoCallScreen() {
 
   const initializePeerConnection = async () => {
     try {
+      // Retrieve the Twilio token from the Firebase function
+      const getTwilioToken = functions().httpsCallable('getTwilioToken');
+      const result = await getTwilioToken();
+      const configuration = { iceServers: result.data.iceServers };
+
       const pc = new RTCPeerConnection(configuration);
       setPeerConnection(pc);
 

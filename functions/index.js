@@ -1,8 +1,30 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
+const twilio = require('twilio');
 admin.initializeApp();
 
 const db = admin.firestore();
+
+
+// Twilio Credentials from the Twilio Console
+const accountSid = 'ACd1e362ef3b0585af6bb47f6f28f9b7a4';
+const authToken = '3622e455a64b4648fcb6ed832e2e4730';
+
+// Create a Twilio client
+const client = twilio(accountSid, authToken);
+
+// Cloud Function to generate Twilio token
+exports.getTwilioToken = functions.https.onCall(async (data, context) => {
+  try {
+    const token = await client.tokens.create();
+    return {
+      iceServers: token.iceServers,
+    };
+  } catch (error) {
+    console.error('Error creating Twilio token:', error);
+    throw new functions.https.HttpsError('internal', 'Unable to create Twilio token');
+  }
+});
 
 exports.findMatch = functions.https.onCall(async (data, context) => {
   if (!context.auth) {
@@ -66,3 +88,4 @@ exports.leaveCall = functions.https.onCall(async (data, context) => {
 
   return { success: true };
 });
+
