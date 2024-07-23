@@ -1,98 +1,99 @@
 // PostCallScreen.js
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
-import { getFirestore, doc, getDoc, updateDoc, addDoc, collection } from 'firebase/firestore';
-import { useNavigation, useRoute } from '@react-navigation/native';
-import GestureRecognizer from 'react-native-swipe-gestures';
+import { View, Text, StyleSheet, Button } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { getAuth } from 'firebase/auth';
+import { getFirestore, doc, updateDoc, collection, addDoc, getDoc, setDoc } from 'firebase/firestore';
+import { app } from '../firebaseConfig';
 
-export default function PostCallScreen() {
-  const [otherUserProfile, setOtherUserProfile] = useState(null);
-  const [currentUserId, setCurrentUserId] = useState('');
-  const [errorMessage, setErrorMessage] = useState('');
-  const navigation = useNavigation();
-  const route = useRoute();
+const db = getFirestore(app);
+
+export default function PostCallScreen({ route }) {
   const { otherUserId } = route.params;
+  const [otherUserProfile, setOtherUserProfile] = useState(null);
+  const [vote, setVote] = useState(null); // 'upvote' or 'downvote'
+  const navigation = useNavigation();
+  const auth = getAuth();
+  const currentUser = auth.currentUser;
 
   useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        const db = getFirestore();
-        const auth = getAuth();
-        const user = auth.currentUser;
-        if (user) {
-          setCurrentUserId(user.uid);
-        }
+    const fetchOtherUserProfile = async () => {
+      if (!otherUserId) return;
 
-        const profileDoc = doc(db, 'profiles', otherUserId);
-        const profileSnapshot = await getDoc(profileDoc);
-        if (profileSnapshot.exists()) {
-          setOtherUserProfile(profileSnapshot.data());
-        } else {
-          setErrorMessage('User profile not found.');
-        }
-      } catch (error) {
-        setErrorMessage(`Error fetching profile: ${error.message}`);
+      const userDoc = await getDoc(doc(db, 'users', otherUserId));
+      if (userDoc.exists()) {
+        setOtherUserProfile(userDoc.data());
       }
     };
 
-    fetchProfile();
+    fetchOtherUserProfile();
   }, [otherUserId]);
 
-  const handleSwipeLeft = async () => {
-    try {
-      const db = getFirestore();
-      const matchRef = doc(db, 'matches', `${currentUserId}_${otherUserId}`);
-      await updateDoc(matchRef, { match: false });
-      navigation.navigate('HomeScreen');
-    } catch (error) {
-      setErrorMessage(`Error updating match: ${error.message}`);
+  useEffect(() => {
+    if (vote) {
+      handleVote(vote);
     }
+  }, [vote]);
+
+  const handleVote = async (vote) => {
+    if (!currentUser || !otherUserId) return;
+
+    const voteDocRef = doc(db, 'votes', `${currentUser.uid}_${otherUserId}`);
+    await setDoc(voteDocRef, { vote, from: currentUser.uid, to: otherUserId });
+
+    const otherUserVoteDocRef = doc(db, 'votes', `${otherUserId}_${currentUser.uid}`);
+    const otherUserVoteDoc = await getDoc(otherUserVoteDocRef);
+
+    if (vote === 'downvote') {
+      // Block the user
+      await updateDoc(doc(db, 'users', currentUser.uid), {
+        blockedUsers: arrayUnion(otherUserId),
+      });
+      await updateDoc(doc(db, 'users', otherUserId), {
+        blockedUsers: arrayUnion(currentUser.uid),
+      });
+    } else if (vote === 'upvote' && otherUserVoteDoc.exists() && otherUserVoteDoc.data().vote === 'upvote') {
+      // Add to friends list if both upvoted
+      await addDoc(collection(db, 'friends'), {
+        user1: currentUser.uid,
+        user2: otherUserId,
+        status: 'accepted',
+      });
+      await addDoc(collection(db, 'friends'), {
+        user1: otherUserId,
+        user2: currentUser.uid,
+        status: 'accepted',
+      });
+    }
+
+    navigation.navigate('MainScreen'); // Navigate back to the main screen after voting
   };
 
-  const handleSwipeRight = async () => {
-    try {
-      const db = getFirestore();
-      const matchRef = doc(db, 'matches', `${currentUserId}_${otherUserId}`);
-      const matchSnapshot = await getDoc(matchRef);
-
-      if (matchSnapshot.exists()) {
-        const matchData = matchSnapshot.data();
-        if (matchData.otherUserSwipedRight) {
-          await updateDoc(matchRef, { match: true });
-        } else {
-          await updateDoc(matchRef, { currentUserSwipedRight: true });
-        }
-      } else {
-        await addDoc(collection(db, 'matches'), {
-          userId1: currentUserId,
-          userId2: otherUserId,
-          currentUserSwipedRight: true,
-          otherUserSwipedRight: false,
-          match: false,
-        });
-      }
-
-      navigation.navigate('HomeScreen');
-    } catch (error) {
-      setErrorMessage(`Error updating match: ${error.message}`);
-    }
-  };
+  if (!otherUserProfile) {
+    return (
+      <View style={styles.container}>
+        <Text>Loading profile...</Text>
+      </View>
+    );
+  }
 
   return (
-    <GestureRecognizer
-      onSwipeLeft={handleSwipeLeft}
-      onSwipeRight={handleSwipeRight}
-      style={styles.container}
-    >
-      {otherUserProfile ? (
-        <View style={styles.profileContainer}>
-          <Image source={{ uri: otherUserProfile.profilePicture }} style={styles.profilePicture} />
-          <Text style={styles.profileName}>{otherUserProfile.name}</Text>
-        </View>
-      ) : (
-        <Text style={styles.errorText}>{errorMessage}</Text>
-      )}
-    </GestureRecognizer>
+    <View style={styles.container}>
+      <Text style={styles.username}>{otherUserProfile.username}</Text>
+      <Text style={styles.description}>{otherUserProfile.description}</Text>
+      <View style={styles.buttonContainer}>
+        <Button
+          title="Upvote"
+          onPress={() => setVote('upvote')}
+          color="green"
+        />
+        <Button
+          title="Downvote"
+          onPress={() => setVote('downvote')}
+          color="red"
+        />
+      </View>
+    </View>
   );
 }
 
@@ -101,25 +102,23 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 16,
     backgroundColor: '#232323',
   },
-  profileContainer: {
-    alignItems: 'center',
-  },
-  profilePicture: {
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-    marginBottom: 20,
-  },
-  profileName: {
+  username: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: 'white',
+    color: '#fff',
   },
-  errorText: {
-    color: 'red',
-    fontSize: 18,
-    textAlign: 'center',
+  description: {
+    fontSize: 16,
+    color: '#ccc',
+    marginVertical: 8,
+  },
+  buttonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    width: '100%',
+    marginTop: 20,
   },
 });
