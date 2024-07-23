@@ -17,7 +17,17 @@
             "useFrameworks": "static"
           }
         }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location.",
+          "locationAlwaysPermission": "Allow $(PRODUCT_NAME) to use your location even when the app is in the background.",
+          "locationWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location while you are using the app.",
+          "isAndroidBackgroundLocationEnabled": true
+        }
       ]
+
     ],
     "splash": {
       "image": "./assets/splash.png",
