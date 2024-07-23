@@ -13,8 +13,12 @@ import {
   Modal,
   FlatList
 } from 'react-native';
-import { auth, firestore } from '../firebaseConfig';
+import { auth, firestore, storage } from '../firebaseConfig';
 import countryCodes from '../constants/countryCodes';
+import Slider from '@react-native-community/slider';
+import * as ImagePicker from 'expo-image-picker';
+import { ActivityIndicator } from 'react-native';
+
 
 
 export default function SignUpScreen({ navigation }) {
@@ -37,6 +41,8 @@ export default function SignUpScreen({ navigation }) {
   const [lifestyleHabits, setLifestyleHabits] = useState([]);
   const [hobbies, setHobbies] = useState([]);
   const [pictures, setPictures] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  
 
 
   const filteredCountryCodes = countryCodes.filter(country => 
@@ -77,6 +83,13 @@ export default function SignUpScreen({ navigation }) {
           firstName: firstName,
           birthDate: birthDate,
           gender: gender,
+          sexualOrientation: sexualOrientation,
+          interestedIn: interestedIn,
+          maxDistance: maxDistance,
+          school: school,
+          lifestyleHabits: lifestyleHabits,
+          hobbies: hobbies,
+          pictures: pictures,
         });
         console.log('User created successfully:', user.uid);
         Alert.alert('Success', 'Account created successfully!', [
@@ -313,7 +326,15 @@ export default function SignUpScreen({ navigation }) {
   const renderStepNine = () => (
     <ScrollView contentContainerStyle={styles.scrollViewContent}>
       <Text style={styles.title}>What's your sexual orientation?</Text>
-      {/* Add options for sexual orientation */}
+      {['Straight', 'Gay', 'Lesbian', 'Bisexual', 'Pansexual', 'Asexual', 'Queer', 'Questioning'].map((option) => (
+        <TouchableOpacity
+          key={option}
+          style={[styles.orientationButton, sexualOrientation === option && styles.selectedOrientationButton]}
+          onPress={() => setSexualOrientation(option)}
+        >
+          <Text style={styles.buttonText}>{option}</Text>
+        </TouchableOpacity>
+      ))}
       <TouchableOpacity style={styles.button} onPress={() => setStep(10)}>
         <Text style={styles.buttonText}>Next</Text>
       </TouchableOpacity>
@@ -326,13 +347,26 @@ export default function SignUpScreen({ navigation }) {
       {['Women', 'Men', 'Everyone'].map((option) => (
         <TouchableOpacity
           key={option}
-          style={[styles.interestButton, interestedIn.includes(option) && styles.selectedInterestButton]}
-          onPress={() => setInterestedIn([...interestedIn, option])}
+          style={[
+            styles.interestButton,
+            interestedIn.includes(option) && styles.selectedInterestButton
+          ]}
+          onPress={() => {
+            if (interestedIn.includes(option)) {
+              setInterestedIn(interestedIn.filter(item => item !== option));
+            } else {
+              setInterestedIn([...interestedIn, option]);
+            }
+          }}
         >
           <Text style={styles.buttonText}>{option}</Text>
         </TouchableOpacity>
       ))}
-      <TouchableOpacity style={styles.button} onPress={() => setStep(11)}>
+      <TouchableOpacity 
+        style={[styles.button, interestedIn.length === 0 && styles.disabledButton]} 
+        onPress={() => setStep(11)}
+        disabled={interestedIn.length === 0}
+      >
         <Text style={styles.buttonText}>Next</Text>
       </TouchableOpacity>
     </ScrollView>
@@ -341,8 +375,18 @@ export default function SignUpScreen({ navigation }) {
   const renderStepEleven = () => (
     <ScrollView contentContainerStyle={styles.scrollViewContent}>
       <Text style={styles.title}>Maximum distance</Text>
-      
-      <Text>{maxDistance} miles</Text>
+      <Slider
+        style={{width: '100%', height: 40}}
+        minimumValue={1}
+        maximumValue={100}
+        step={1}
+        value={maxDistance}
+        onValueChange={(value) => setMaxDistance(value)}
+        minimumTrackTintColor="#2f4f4f"
+        maximumTrackTintColor="#d3d3d3"
+        thumbTintColor="#2f4f4f"
+      />
+      <Text style={styles.distanceText}>{Math.round(maxDistance)} miles</Text>
       <TouchableOpacity style={styles.button} onPress={() => setStep(12)}>
         <Text style={styles.buttonText}>Next</Text>
       </TouchableOpacity>
@@ -385,15 +429,71 @@ export default function SignUpScreen({ navigation }) {
     </ScrollView>
   );
   
-  const renderStepFifteen = () => (
-    <ScrollView contentContainerStyle={styles.scrollViewContent}>
-      <Text style={styles.title}>Add at least 2 pictures</Text>
-      
-      <TouchableOpacity style={styles.button} onPress={handleSignUp}>
-        <Text style={styles.buttonText}>Finish Sign Up</Text>
-      </TouchableOpacity>
-    </ScrollView>
-  );
+  const renderStepFifteen = () => {
+  
+    const pickImage = async () => {
+      let result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 1,
+      });
+  
+      if (!result.canceled) {
+        await uploadImage(result.assets[0].uri);
+      }
+    };
+  
+    const uploadImage = async (uri) => {
+      setUploading(true);
+      try {
+        const filename = uri.substring(uri.lastIndexOf('/') + 1);
+        const userId = auth().currentUser.uid;
+        const reference = storage().ref(`profilePictures/${userId}/${filename}`);
+  
+        await reference.putFile(uri);
+        const downloadURL = await reference.getDownloadURL();
+  
+        setPictures([...pictures, downloadURL]);
+      } catch (error) {
+        console.error("Error uploading image: ", error);
+        Alert.alert("Error", "An error occurred while uploading the image.");
+      } finally {
+        setUploading(false);
+      }
+    };
+  
+    return (
+      <ScrollView contentContainerStyle={styles.scrollViewContent}>
+        <Text style={styles.title}>Add at least 2 pictures</Text>
+        <View style={styles.imageContainer}>
+          {pictures.map((uri, index) => (
+            <Image key={index} source={{ uri }} style={styles.image} />
+          ))}
+          {pictures.length < 6 && (
+            <TouchableOpacity 
+              style={styles.addImageButton} 
+              onPress={pickImage}
+              disabled={uploading}
+            >
+              {uploading ? (
+                <ActivityIndicator color="white" />
+              ) : (
+                <Text style={styles.addImageButtonText}>+</Text>
+              )}
+            </TouchableOpacity>
+          )}
+        </View>
+        <TouchableOpacity 
+          style={[styles.button, pictures.length < 2 && styles.disabledButton]} 
+          onPress={handleSignUp}
+          disabled={pictures.length < 2 || uploading}
+        >
+          <Text style={styles.buttonText}>Finish Sign Up</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    );
+  };
 
   const renderCurrentStep = () => {
     switch (step) {
@@ -531,6 +631,9 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: 'bold',
   },
+  selectedInterestButton: {
+    backgroundColor: '#4f7f7f',
+  },
   phoneInput: {
     flex: 1,
     height: 40,
@@ -579,4 +682,49 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: 'bold',
   },
+  orientationButton: {
+    backgroundColor: '#2f4f4f',
+    padding: 10,
+    borderRadius: 5,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  selectedOrientationButton: {
+    backgroundColor: '#4f7f7f',
+  },
+  distanceText: {
+    color: 'white',
+    fontSize: 18,
+    textAlign: 'center',
+    marginTop: 10,
+  },
+  imageContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  image: {
+    width: 100,
+    height: 100,
+    margin: 5,
+    borderRadius: 10,
+  },
+  addImageButton: {
+    width: 100,
+    height: 100,
+    backgroundColor: '#2f4f4f',
+    justifyContent: 'center',
+    alignItems: 'center',
+    margin: 5,
+    borderRadius: 10,
+  },
+  addImageButtonText: {
+    color: 'white',
+    fontSize: 40,
+  },
+  disabledButton: {
+    backgroundColor: '#555',
+  },
+
 });

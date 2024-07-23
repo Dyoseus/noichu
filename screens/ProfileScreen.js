@@ -1,128 +1,115 @@
-//profile scren
-
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Image, TextInput, Modal, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Image, Modal, ScrollView, TouchableOpacity, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { FontAwesome } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
-import * as ImagePicker from 'expo-image-picker';
 
 export default function ProfileScreen({ navigation }) {
-  const [firstName, setFirstName] = useState(null);
-  const [profilePic, setProfilePic] = useState(null);
-  const [uploading, setUploading] = useState(false);
-  const [gender, setGender] = useState('');
-  const [phone, setPhoneNumber] = useState('');
-  const [meet, setMeet] = useState([]);
-  const [find, setFind] = useState([]);
-  const [ageRange, setAgeRange] = useState({ min: '', max: '' });
-  const [location, setLocation] = useState('');
-  const [locationRadius, setLocationRadius] = useState('');
-  const [age, setAge] = useState(''); // Remove default value
-  const [sexualOrientation, setSexualOrientation] = useState(''); // Remove default value
-  const [hobbies, setHobbies] = useState([]); // Remove default value
-  const [modalVisible, setModalVisible] = useState(false); // State to manage modal visibility
+  const [userData, setUserData] = useState({
+    firstName: '',
+    phoneNumber: '',
+    email: '',
+    birthDate: '',
+    gender: '',
+    sexualOrientation: '',
+    interestedIn: [],
+    maxDistance: 0,
+    school: '',
+    lifestyleHabits: [],
+    hobbies: [],
+    pictures: [],
+  });
+  const [modalVisible, setModalVisible] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [pictures, setPictures] = useState([]);
 
   useEffect(() => {
     const fetchUserData = async () => {
-      const user = auth.currentUser;
-      try{
+      setLoading(true);
+      const user = auth().currentUser;
       if (user) {
         const userDoc = await firestore().collection('users').doc(user.uid).get();
-          if (userDoc.exists()) {
-            const userData = userDoc.data();
-            setFirstName(userDoc.data().firstName);
-            setProfilePic(userData.profilePic || null);
-            setGender(userData.gender || '');
-            setPhoneNumber(userData.phone || '');
-            setMeet(userData.meet || []);
-            setFind(userData.find || []);
-            setAgeRange(userData.ageRange || { min: '', max: '' });
-            setLocation(userData.location || '');
-            setLocationRadius(userData.locationRadius || '');
-            setAge(userData.age || ''); // Apply default only if no value
-            setSexualOrientation(userData.sexualOrientation || ''); // Apply default only if no value
-            setHobbies(userData.hobbies || []); // Apply default only if no value
-          }
+        if (userDoc.exists) {
+          const data = userDoc.data();
+          setUserData(data);
+          setPictures(data.pictures || []);
         }
-      } catch (error) {
-        console.error('Error fetching user data:', error);
       }
+      setLoading(false);
     };
 
     fetchUserData();
   }, []);
 
-  const handleLogout = async () => {
-    try {
-      await auth().signOut();
-      navigation.navigate('Welcome');  // Navigate to WelcomeScreen.js
-    } catch (error) {
-      alert(error.message);
+  const handleAddImage = async () => {
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.5,
+    });
+
+    if (!result.canceled) {
+      const uploadResult = await uploadImage(result.assets[0].uri);
+      if (uploadResult) {
+        const newPictures = [...pictures, uploadResult];
+        setPictures(newPictures);
+        // Update user data in Firestore
+        await firestore().collection('users').doc(auth().currentUser.uid).update({
+          pictures: newPictures,
+        });
+      }
     }
   };
 
-  const handleSelectImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 0.2,
-    });
+  const uploadImage = async (uri) => {
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    const filename = `${Date.now()}.jpg`;
+    const userId = auth().currentUser.uid;
+    const ref = storage().ref().child(`profilePictures/${userId}/${filename}`);
 
-    if (result.cancelled) {
-      console.log("Image picker was cancelled");
-      return;
-    }
-
-    if (!result.assets || result.assets.length === 0) {
-      console.error("No image selected");
-      alert("No image selected");
-      return;
-    }
-
-    const imageUri = result.assets[0].uri;
-    if (!imageUri) {
-      console.error("No image URI available");
-      alert("No image URI available");
-      return;
-    }
-
-    setUploading(true);
-    const fileName = imageUri.split('/').pop();
-
-    if (!fileName) {
-      console.error("File name could not be determined");
-      alert('File name could not be determined');
-      setUploading(false);
-      return;
-    }
-
-    const fileExtension = fileName.split('.').pop();
-
-    if (!fileExtension) {
-      console.error("File extension could not be determined");
-      alert('File extension could not be determined');
-      setUploading(false);
-      return;
-    }
-
-    const storageRef = ref(storage, `profilePictures/${auth.currentUser.uid}.${fileExtension}`);
     try {
-      const response = await fetch(imageUri);
-      const blob = await response.blob();
-      await uploadBytes(storageRef, blob);
-      const downloadURL = await getDownloadURL(storageRef);
-      await updateDoc(doc(db, 'users', auth.currentUser.uid), {
-        profilePic: downloadURL,
-      });
-      setProfilePic(downloadURL);
+      await ref.put(blob);
+      const url = await ref.getDownloadURL();
+      return url;
     } catch (error) {
       console.error("Error uploading image: ", error);
-      alert('Error uploading image');
-    } finally {
-      setUploading(false);
+      return null;
+    }
+  };
+
+  const handleDeleteImage = async (index) => {
+    const imageToDelete = pictures[index];
+    const newPictures = pictures.filter((_, i) => i !== index);
+    setPictures(newPictures);
+
+    // Delete image from storage
+    const userId = auth().currentUser.uid;
+    const imageName = imageToDelete.split('%2F').pop().split('?')[0];
+    const imageRef = storage().ref().child(`profilePictures/${userId}/${imageName}`);
+    try {
+      await imageRef.delete();
+    } catch (error) {
+      console.error("Error deleting image from storage: ", error);
+    }
+
+    // Update user data in Firestore
+    await firestore().collection('users').doc(userId).update({
+      pictures: newPictures,
+    });
+  };
+
+
+  const handleLogout = async () => {
+    try {
+      await auth().signOut();
+      navigation.navigate('Welcome');
+    } catch (error) {
+      alert(error.message);
     }
   };
 
@@ -137,40 +124,62 @@ export default function ProfileScreen({ navigation }) {
   const saveProfile = async (updatedProfile) => {
     try {
       await firestore().collection('users').doc(auth().currentUser.uid).update(updatedProfile);
-      setFirstName(updatedProfile.firstName || '');
-      setGender(updatedProfile.gender || '');
-      setPhoneNumber(updatedProfile.phone || '');
-      setMeet(updatedProfile.meet || []);
-      setFind(updatedProfile.find || []);
-      setAgeRange(updatedProfile.ageRange || { min: '', max: '' });
-      setLocation(updatedProfile.location || '');
-      setLocationRadius(updatedProfile.locationRadius || '');
-      setAge(updatedProfile.age || '');
-      setSexualOrientation(updatedProfile.sexualOrientation || '');
-      setHobbies(updatedProfile.hobbies || []);
+      setUserData(updatedProfile);
       setModalVisible(false);
     } catch (error) {
       alert(error.message);
     }
   };
 
+  const renderImageGrid = () => {
+    const imageSlots = Array(6).fill(null);
+    pictures.forEach((pic, index) => {
+      imageSlots[index] = pic;
+    });
+
+    return (
+      <View style={styles.imageGrid}>
+        {imageSlots.map((pic, index) => (
+          <View key={index} style={styles.imageContainer}>
+            {pic ? (
+              <>
+                <Image source={{ uri: pic }} style={styles.profileImage} />
+                <TouchableOpacity
+                  style={styles.deleteButton}
+                  onPress={() => handleDeleteImage(index)}
+                >
+                  <FontAwesome name="times" size={20} color="white" />
+                </TouchableOpacity>
+              </>
+            ) : (
+              index === pictures.length && pictures.length < 6 && (
+                <TouchableOpacity style={styles.addButton} onPress={handleAddImage}>
+                  <FontAwesome name="plus" size={40} color="#2f4f4f" />
+                </TouchableOpacity>
+              )
+            )}
+          </View>
+        ))}
+      </View>
+    );
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <Text>Loading...</Text>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView>
-        <Pressable onPress={handleSelectImage}>
-          {profilePic ? (
-            <Image source={{ uri: profilePic }} style={styles.profileImage} />
-          ) : (
-            <View style={styles.imagePlaceholder}>
-              <Text style={styles.imagePlaceholderText}>Select Image</Text>
-            </View>
-          )}
-        </Pressable>
+        <Text style={styles.firstName}>{userData.firstName ? `Welcome, ${userData.firstName}` : 'Welcome'}</Text>
+        
+        {renderImageGrid()}
 
-        <Text style={styles.firstName}>
-  {firstName === null ? 'Loading...' : `Welcome, ${firstName}`}
-</Text>
-        {uploading && <Text>Uploading...</Text>}
+
         <Pressable style={styles.logoutButton} onPress={handleLogout}>
           <Text style={styles.logoutButtonText}>Logout</Text>
         </Pressable>
@@ -179,7 +188,23 @@ export default function ProfileScreen({ navigation }) {
           <Text style={styles.editProfileButtonText}>Edit Profile</Text>
         </Pressable>
 
-        {/* Modal for Edit Profile */}
+        <View>
+          <Text style={styles.infoTitle}>Personal Information</Text>
+          <Text>Name: {userData.firstName || 'Not set'}</Text>
+          <Text>Phone: {userData.phoneNumber || 'Not set'}</Text>
+          <Text>Email: {userData.email || 'Not set'}</Text>
+          <Text>Birth Date: {userData.birthDate || 'Not set'}</Text>
+          <Text>Gender: {userData.gender || 'Not set'}</Text>
+          <Text>Sexual Orientation: {userData.sexualOrientation || 'Not set'}</Text>
+          <Text>School: {userData.school || 'Not set'}</Text>
+          <Text>Hobbies: {userData.hobbies ? userData.hobbies.join(', ') : 'Not set'}</Text>
+          <Text>Lifestyle Habits: {userData.lifestyleHabits ? userData.lifestyleHabits.join(', ') : 'Not set'}</Text>
+
+          <Text style={styles.infoTitle}>Preferences</Text>
+          <Text>Interested In: {userData.interestedIn ? userData.interestedIn.join(', ') : 'Not set'}</Text>
+          <Text>Max Distance: {userData.maxDistance ? `${userData.maxDistance} miles` : 'Not set'}</Text>
+        </View>
+
         <Modal
           animationType="slide"
           transparent={true}
@@ -189,82 +214,51 @@ export default function ProfileScreen({ navigation }) {
           <View style={styles.modalContainer}>
             <View style={styles.modalContent}>
               <ScrollView>
-                <EditProfileForm
-                  username={firstName}
-                  gender={gender}
-                  phone={phone}
-                  age={age}
-                  sexualOrientation={sexualOrientation}
-                  hobbies={hobbies}
-                  meet={meet}
-                  find={find}
-                  ageRange={ageRange}
-                  location={location}
-                  locationRadius={locationRadius}
-                  onCancel={closeEditModal}
-                  onSave={saveProfile}
-                />
+              <EditProfileForm
+                userData={{
+                  firstName: userData.firstName || '',
+                  gender: userData.gender || '',
+                  phoneNumber: userData.phoneNumber || '',
+                  age: userData.age || '',
+                  sexualOrientation: userData.sexualOrientation || '',
+                  hobbies: userData.hobbies || [],
+                  meet: userData.meet || [],
+                  find: userData.find || [],
+                  ageRange: userData.ageRange || { min: '', max: '' },
+                  location: userData.location || '',
+                  locationRadius: userData.locationRadius || '',
+                }}
+                onCancel={closeEditModal}
+                onSave={saveProfile}
+              />
               </ScrollView>
             </View>
           </View>
         </Modal>
-
-        <View>
-          {/* Personal Information Section */}
-          <Text style={styles.infoTitle}>Personal Information</Text>
-          <Text>Name: {firstName}</Text>
-          <Text>Phone: {phone}</Text>
-          <Text>Gender: {gender}</Text>
-          <Text>Age: {age}</Text>
-          <Text>Sexual Orientation: {sexualOrientation}</Text>
-          <Text>Hobbies: {hobbies.join(', ')}</Text>
-          <Text>Location: {location}</Text>
-
-          {/* Preference Information */}
-          <Text style={styles.infoTitle}>Preferences</Text>
-          <Text>Meet: {meet.join(', ')}</Text>
-          <Text>Find: {find.join(', ')}</Text>
-          <Text>Age Range of Interests: {ageRange.min} - {ageRange.max}</Text>
-          <Text>Location Radius: {locationRadius}</Text>
-        </View>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-const EditProfileForm = ({
-  firstName,
-  gender,
-  phone,
-  age,
-  sexualOrientation,
-  hobbies,
-  meet,
-  find,
-  ageRange,
-  location,
-  locationRadius,
-  onCancel,
-  onSave,
-}) => {
-  const [newFirstName, setNewFirstName] = useState(firstName);
-  const [newGender, setNewGender] = useState(gender);
-  const [newPhone, setNewPhone] = useState(phone);
-  const [newAge, setNewAge] = useState(age);
-  const [newSexualOrientation, setNewSexualOrientation] = useState(sexualOrientation);
-  const [newHobbies, setNewHobbies] = useState(hobbies.join(', '));
-  const [newMeet, setNewMeet] = useState(meet.join(', '));
-  const [newFind, setNewFind] = useState(find.join(', '));
-  const [newMinAge, setNewMinAge] = useState(ageRange.min);
-  const [newMaxAge, setNewMaxAge] = useState(ageRange.max);
-  const [newLocation, setNewLocation] = useState(location);
-  const [newLocationRadius, setNewLocationRadius] = useState(locationRadius);
+const EditProfileForm = ({ userData, onCancel, onSave }) => {
+  const [newFirstName, setNewFirstName] = useState(userData.firstName);
+  const [newGender, setNewGender] = useState(userData.gender);
+  const [newPhone, setNewPhone] = useState(userData.phoneNumber);
+  const [newAge, setNewAge] = useState(userData.age);
+  const [newSexualOrientation, setNewSexualOrientation] = useState(userData.sexualOrientation);
+  const [newHobbies, setNewHobbies] = useState(userData.hobbies.join(', '));
+  const [newMeet, setNewMeet] = useState(userData.meet.join(', '));
+  const [newFind, setNewFind] = useState(userData.find.join(', '));
+  const [newMinAge, setNewMinAge] = useState(userData.ageRange.min);
+  const [newMaxAge, setNewMaxAge] = useState(userData.ageRange.max);
+  const [newLocation, setNewLocation] = useState(userData.location);
+  const [newLocationRadius, setNewLocationRadius] = useState(userData.locationRadius);
 
   const handleSave = () => {
     onSave({
       firstName: newFirstName,
       gender: newGender,
-      phone: newPhone,
+      phoneNumber: newPhone,
       age: newAge,
       sexualOrientation: newSexualOrientation,
       hobbies: newHobbies.split(',').map(item => item.trim()),
@@ -320,7 +314,7 @@ const EditProfileForm = ({
         placeholder="Enter sexual orientation"
       />
 
-      <Text>Hobbies</Text>
+      <Text>Hobbies (comma separated)</Text>
       <TextInput
         style={styles.input}
         value={newHobbies}
@@ -388,6 +382,7 @@ const EditProfileForm = ({
     </View>
   );
 };
+
 
 const styles = StyleSheet.create({
   container: {
@@ -500,6 +495,44 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     maxHeight: '80%', // Limit the height of the modal content
+  },
+  imageGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    padding: 10,
+  },
+  imageContainer: {
+    width: '32%',
+    aspectRatio: 1,
+    marginBottom: 10,
+    position: 'relative',
+  },
+  profileImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 10,
+  },
+  addButton: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#2f4f4f',
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  deleteButton: {
+    position: 'absolute',
+    top: 5,
+    right: 5,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 15,
+    width: 30,
+    height: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
 
