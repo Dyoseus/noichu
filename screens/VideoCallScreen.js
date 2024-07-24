@@ -1,15 +1,14 @@
 // VideoCallScreen.js
 
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Image, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import functions from '@react-native-firebase/functions';
 import { RTCPeerConnection, RTCIceCandidate, RTCSessionDescription, mediaDevices, RTCView } from 'react-native-webrtc';
 import { useNavigation } from '@react-navigation/native';
-
-const configuration = { "iceServers": [{ "urls": "stun:stun.l.google.com:19302" }] };
+import * as Location from 'expo-location';
 
 export default function VideoCallScreen() {
   const [localStream, setLocalStream] = useState(null);
@@ -19,7 +18,7 @@ export default function VideoCallScreen() {
   const [userId, setUserId] = useState('');
   const [inQueue, setInQueue] = useState(false);
   const [callDocId, setCallDocId] = useState(null);
-  const [countdown, setCountdown] = useState(5);
+  const [countdown, setCountdown] = useState(60);
   const [callConnected, setCallConnected] = useState(false);
   const [otherUsername, setOtherUsername] = useState('');
   const [otherUserProfilePic, setOtherUserProfilePic] = useState(null);
@@ -30,6 +29,7 @@ export default function VideoCallScreen() {
     const user = auth().currentUser;
     if (user) {
       setUserId(user.uid);
+      requestAndStoreLocation(user.uid);
     }
   }, []);
 
@@ -45,11 +45,49 @@ export default function VideoCallScreen() {
   }, [countdown, callConnected]);
 
   const resetTimer = () => {
-    setCountdown(5);
+    setCountdown(60);
+  };
+
+  const requestAndStoreLocation = async (userId) => {
+    try {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Location permission is required for better matchmaking. You can change this in your device settings.');
+        return;
+      }
+
+      let location = await Location.getCurrentPositionAsync({});
+      const { latitude, longitude } = location.coords;
+      await storeLocationInFirebase(userId, latitude, longitude);
+    } catch (error) {
+      console.error('Error getting location:', error);
+      Alert.alert('Location Error', 'Unable to get your current location. Please try again later.');
+    }
+  };
+
+  const storeLocationInFirebase = async (userId, latitude, longitude) => {
+    try {
+      await firestore().collection('users').doc(userId).update({
+        location: {
+          latitude,
+          longitude,
+          lastUpdated: firestore.FieldValue.serverTimestamp()
+        }
+      });
+      console.log('Location stored successfully');
+    } catch (error) {
+      console.error('Error storing location:', error);
+      Alert.alert('Error', 'Failed to store location. Please try again later.');
+    }
   };
 
   const initializePeerConnection = async () => {
     try {
+      // Retrieve the Twilio token from the Firebase function
+      const getTwilioToken = functions().httpsCallable('getTwilioToken');
+      const result = await getTwilioToken();
+      const configuration = { iceServers: result.data.iceServers };
+
       const pc = new RTCPeerConnection(configuration);
       setPeerConnection(pc);
 
