@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Button } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, doc, updateDoc, collection, addDoc, getDoc, setDoc } from 'firebase/firestore';
+import { getFirestore, doc, updateDoc, arrayUnion, getDoc, setDoc, collection, addDoc } from 'firebase/firestore';
 import { app } from '../firebaseConfig';
 
 const db = getFirestore(app);
