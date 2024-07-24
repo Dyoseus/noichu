@@ -1,8 +1,30 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
+const twilio = require('twilio');
 admin.initializeApp();
 
 const db = admin.firestore();
+
+
+// Twilio Credentials from the Twilio Console
+const accountSid = 'ACd1e362ef3b0585af6bb47f6f28f9b7a4';
+const authToken = '3622e455a64b4648fcb6ed832e2e4730';
+
+// Create a Twilio client
+const client = twilio(accountSid, authToken);
+
+// Cloud Function to generate Twilio token
+exports.getTwilioToken = functions.https.onCall(async (data, context) => {
+  try {
+    const token = await client.tokens.create();
+    return {
+      iceServers: token.iceServers,
+    };
+  } catch (error) {
+    console.error('Error creating Twilio token:', error);
+    throw new functions.https.HttpsError('internal', 'Unable to create Twilio token');
+  }
+});
 
 exports.findMatch = functions.https.onCall(async (data, context) => {
   if (!context.auth) {
@@ -10,12 +32,6 @@ exports.findMatch = functions.https.onCall(async (data, context) => {
   }
 
   const userId = context.auth.uid;
-
-  // Check if user is already in a call
-  const userDoc = await db.collection('users').doc(userId).get();
-  if (userDoc.exists && userDoc.data().inCall) {
-    throw new functions.https.HttpsError('failed-precondition', 'User is already in a call.');
-  }
 
   // Find a waiting user
   const queueSnapshot = await db.collection('queue')
@@ -46,9 +62,6 @@ exports.findMatch = functions.https.onCall(async (data, context) => {
     });
   }
 
-  // Update user's status
-  await db.collection('users').doc(userId).update({ inCall: true });
-
   return { callDocId, status: queueSnapshot.empty ? 'waiting' : 'matched' };
 });
 
@@ -64,7 +77,6 @@ exports.leaveCall = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError('invalid-argument', 'Call document ID is required.');
   }
 
-
   const callDoc = await db.collection('queue').doc(callDocId).get();
 
   if (!callDoc.exists) {
@@ -73,9 +85,6 @@ exports.leaveCall = functions.https.onCall(async (data, context) => {
 
   // Update call status
   await callDoc.ref.update({ status: 'ended' });
-
-  // Clean up user status
-  await db.collection('users').doc(userId).update({ inCall: false });
 
   return { success: true };
 });
