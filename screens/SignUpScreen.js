@@ -21,6 +21,7 @@ import { ActivityIndicator } from 'react-native';
 
 
 
+
 export default function SignUpScreen({ navigation }) {
   const [step, setStep] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
@@ -288,18 +289,73 @@ export default function SignUpScreen({ navigation }) {
       </TouchableOpacity>
     </ScrollView>
   );
-  
+
+  const handleBirthDateChange = (text) => {
+    // Remove any non-digit characters
+    const cleaned = text.replace(/\D/g, '');
+    
+    let formatted = cleaned;
+    if (cleaned.length > 4) {
+      formatted = `${cleaned.slice(0, 2)}/${cleaned.slice(2, 4)}/${cleaned.slice(4, 8)}`;
+    } else if (cleaned.length > 2) {
+      formatted = `${cleaned.slice(0, 2)}/${cleaned.slice(2)}`;
+    }
+    
+    setBirthDate(formatted);
+  };
+
+  const validateBirthDate = (date) => {
+    const regex = /^(0[1-9]|1[0-2])\/(0[1-9]|[12][0-9]|3[01])\/\d{4}$/;
+    if (!regex.test(date)) return false;
+
+    const [month, day, year] = date.split('/').map(Number);
+    const birthDate = new Date(year, month - 1, day);
+    return birthDate.getMonth() === month - 1 && birthDate.getDate() === day && birthDate.getFullYear() === year;
+  };
+
+  const calculateAge = (birthDateString) => {
+    const today = new Date();
+    const [month, day, year] = birthDateString.split('/').map(Number);
+    const birthDate = new Date(year, month - 1, day);
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    
+    return age;
+  };
+
+  const handleNextStep = () => {
+    if (!validateBirthDate(birthDate)) {
+      Alert.alert('Invalid Date', 'Please enter a valid date in MM/DD/YYYY format.');
+      return;
+    }
+
+    const age = calculateAge(birthDate);
+    if (age < 18) {
+      Alert.alert('Age Restriction', 'You must be at least 18 years old to use this app.');
+      return;
+    }
+
+    setStep(8); // Move to the next step
+  };
+
   const renderStepSeven = () => (
     <ScrollView contentContainerStyle={styles.scrollViewContent}>
       <Text style={styles.title}>When's your birthday?</Text>
       <TextInput
         style={styles.input}
-        placeholder="Birth Date (YYYY-MM-DD)"
+        placeholder="MM/DD/YYYY"
         placeholderTextColor="#e0e0e0"
         value={birthDate}
-        onChangeText={setBirthDate}
+        onChangeText={handleBirthDateChange}
+        keyboardType="numeric"
+        maxLength={10}
       />
-      <TouchableOpacity style={styles.button} onPress={() => setStep(8)}>
+      <Text style={styles.helperText}>Enter your birth date in MM/DD/YYYY format</Text>
+      <TouchableOpacity style={styles.button} onPress={handleNextStep}>
         <Text style={styles.buttonText}>Next</Text>
       </TouchableOpacity>
     </ScrollView>
@@ -569,6 +625,11 @@ const styles = StyleSheet.create({
   },
   picker: {
     color: 'white',
+  },
+  helperText: {
+    color: '#e0e0e0',
+    fontSize: 14,
+    marginBottom: 20,
   },
   input: {
     height: 40,
