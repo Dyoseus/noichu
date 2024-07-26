@@ -231,49 +231,6 @@ export default function SignUpScreen({ navigation }) {
     </ScrollView>
   );
 
-  const renderStepFive = () => (
-    <ScrollView contentContainerStyle={styles.scrollViewContent}>
-      <Text style={styles.title}>Tell us about yourself</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="First Name"
-        placeholderTextColor="#e0e0e0"
-        value={firstName}
-        onChangeText={setFirstName}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Birth Date (YYYY-MM-DD)"
-        placeholderTextColor="#e0e0e0"
-        value={birthDate}
-        onChangeText={setBirthDate}
-      />
-      <View style={styles.genderContainer}>
-        <TouchableOpacity
-          style={[styles.genderButton, gender === 'Male' && styles.selectedGenderButton]}
-          onPress={() => setGender('Male')}
-        >
-          <Text style={styles.buttonText}>Male</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.genderButton, gender === 'Female' && styles.selectedGenderButton]}
-          onPress={() => setGender('Female')}
-        >
-          <Text style={styles.buttonText}>Female</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.genderButton, gender === 'Nonbinary' && styles.selectedGenderButton]}
-          onPress={() => setGender('Nonbinary')}
-        >
-          <Text style={styles.buttonText}>Nonbinary</Text>
-        </TouchableOpacity>
-      </View>
-      <TouchableOpacity style={styles.button} onPress={handleSignUp}>
-        <Text style={styles.buttonText}>Sign Up</Text>
-      </TouchableOpacity>
-    </ScrollView>
-  );
-
   const renderStepSix = () => (
     <ScrollView contentContainerStyle={styles.scrollViewContent}>
       <Text style={styles.title}>What's your first name?</Text>
@@ -400,7 +357,7 @@ export default function SignUpScreen({ navigation }) {
   const renderStepTen = () => (
     <ScrollView contentContainerStyle={styles.scrollViewContent}>
       <Text style={styles.title}>Who are you interested in seeing?</Text>
-      {['Women', 'Men', 'Everyone'].map((option) => (
+      {['Woman', 'Man', 'Everyone'].map((option) => (
         <TouchableOpacity
           key={option}
           style={[
@@ -557,7 +514,6 @@ export default function SignUpScreen({ navigation }) {
       case 2: return renderStepTwo();
       case 3: return renderStepThree();
       case 4: return renderStepFour();
-      case 5: return renderStepFive();
       case 6: return renderStepSix(); 
       case 7: return renderStepSeven();
       case 8: return renderStepEight();
