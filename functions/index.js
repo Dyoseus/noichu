@@ -33,36 +33,67 @@ exports.findMatch = functions.https.onCall(async (data, context) => {
 
   const userId = context.auth.uid;
 
-  // Find a waiting user
-  const queueSnapshot = await db.collection('queue')
-    .where('status', '==', 'waiting')
-    .where('userId', '!=', userId)
-    .limit(1)
-    .get();
+  // Get the current user's profile
+  const userDoc = await db.collection('users').doc(userId).get();
+  if (!userDoc.exists) {
+    throw new functions.https.HttpsError('not-found', 'User profile not found.');
+  }
+  const userProfile = userDoc.data();
 
-  let callDocId;
+  // Determine the gender and interest for matching
+  const userGender = userProfile.gender;
+  const interestedIn = userProfile.interestedIn;
 
-  if (queueSnapshot.empty) {
-    // No waiting users, add this user to queue
-    const newQueueDoc = await db.collection('queue').add({
-      userId: userId,
-      status: 'waiting',
-      createdAt: admin.firestore.FieldValue.serverTimestamp()
-    });
-    callDocId = newQueueDoc.id;
-  } else {
-    // Match found
-    const matchDoc = queueSnapshot.docs[0];
-    callDocId = matchDoc.id;
-    
-    // Update the matched document
-    await matchDoc.ref.update({
-      status: 'matched',
-      matchedUserId: userId
-    });
+  if (!userGender || !interestedIn) {
+    throw new functions.https.HttpsError('failed-precondition', 'User profile must include gender and interest.');
   }
 
-  return { callDocId, status: queueSnapshot.empty ? 'waiting' : 'matched' };
+  // **BEGIN TRANSACTION**
+  return db.runTransaction(async (transaction) => { 
+    // Query for a matching user within the transaction
+    const queueSnapshot = await transaction.get(
+      db.collection('queue')
+        .where('status', '==', 'waiting')
+        .where('userId', '!=', userId)
+        .where('gender', '==', interestedIn)
+        .where('interestedIn', '==', userGender)
+        .limit(1)
+    );
+
+    let callDocId;
+
+    if (queueSnapshot.empty) {
+      // No match found, add the current user to the queue
+      const newQueueDoc = db.collection('queue').doc(); // Generate a new document ID
+      callDocId = newQueueDoc.id;
+      transaction.set(newQueueDoc, {
+        userId: userId,
+        status: 'waiting',
+        gender: userGender,
+        interestedIn: interestedIn,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } else {
+      // Match found!
+      const matchDoc = queueSnapshot.docs[0];
+      callDocId = matchDoc.id;
+
+      // Update the matched user's status atomically
+      transaction.update(matchDoc.ref, {
+        status: 'matched',
+        matchedUserId: userId,
+      });
+    }
+
+    // Return the callDocId and status
+    return { callDocId, status: queueSnapshot.empty ? 'waiting' : 'matched' };
+
+  // **END TRANSACTION**
+  }).catch((error) => { 
+    // Handle transaction errors
+    console.error('Transaction failed:', error);
+    throw new functions.https.HttpsError('internal', 'Matching failed. Please try again.');
+  }); 
 });
 
 exports.leaveCall = functions.https.onCall(async (data, context) => {
