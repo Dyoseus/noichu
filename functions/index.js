@@ -7,8 +7,8 @@ const db = admin.firestore();
 
 
 // Twilio Credentials from the Twilio Console
-const accountSid = 'ACd1e362ef3b0585af6bb47f6f28f9b7a4';
-const authToken = '3622e455a64b4648fcb6ed832e2e4730';
+const accountSid = functions.config().twilio.accountsid; 
+const authToken = functions.config().twilio.authtoken;
 
 // Create a Twilio client
 const client = twilio(accountSid, authToken);
