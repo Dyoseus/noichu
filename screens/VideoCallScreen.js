@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, Image, Alert } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
@@ -170,6 +170,7 @@ export default function VideoCallScreen() {
     
       if (user.uid < matchedUserId) {
         createOffer(callId);
+        handleAnswer(callId);
       } else {
         listenForOffer(callId);
       }
@@ -183,11 +184,13 @@ export default function VideoCallScreen() {
 
   const createOffer = async (callId) => {
     try {
-      console.log('Creating offer');
+      if (peerConnection.current.signalingState !== "stable") {
+        console.log("The connection isn't stable yet");
+        return;
+      }
+      
       const offer = await peerConnection.current.createOffer();
-      console.log('Offer created:', offer);
       await peerConnection.current.setLocalDescription(offer);
-      console.log('Local description set');
   
       await firestore().collection('calls').doc(callId).update({
         offer: {
@@ -195,18 +198,17 @@ export default function VideoCallScreen() {
           sdp: offer.sdp
         }
       });
-      console.log('Offer sent to Firestore');
     } catch (error) {
       console.error("Error creating offer:", error);
       setErrorMessage("Error creating offer. Please try again.");
     }
   };
-
+  
   const listenForOffer = async (callId) => {
     const callRef = firestore().collection('calls').doc(callId);
     callRef.onSnapshot(async (snapshot) => {
       const data = snapshot.data();
-      if (data && data.offer && !peerConnection.current.remoteDescription) {
+      if (data && data.offer && peerConnection.current.signalingState === "stable") {
         try {
           const offer = new RTCSessionDescription(data.offer);
           await peerConnection.current.setRemoteDescription(offer);
@@ -234,35 +236,71 @@ export default function VideoCallScreen() {
 
   const listenForICECandidates = async (callId) => {
     const callRef = firestore().collection('calls').doc(callId);
-    const candidatesBuffer = [];
+    const candidatesBuffer = new Set();
   
     callRef.collection('iceCandidates').onSnapshot((snapshot) => {
       snapshot.docChanges().forEach(async (change) => {
         if (change.type === 'added') {
-          const candidate = new RTCIceCandidate(change.doc.data());
-          if (peerConnection.current.remoteDescription) {
-            try {
-              await peerConnection.current.addIceCandidate(candidate);
-            } catch (error) {
-              console.error('Error adding ICE candidate:', error);
+          const candidateData = change.doc.data();
+          const candidateString = JSON.stringify(candidateData);
+          
+          if (!candidatesBuffer.has(candidateString)) {
+            candidatesBuffer.add(candidateString);
+            const candidate = new RTCIceCandidate(candidateData);
+            if (peerConnection.current.remoteDescription) {
+              try {
+                await peerConnection.current.addIceCandidate(candidate);
+              } catch (error) {
+                console.error('Error adding ICE candidate:', error);
+              }
             }
-          } else {
-            candidatesBuffer.push(candidate);
           }
         }
       });
     });
   
-    // Add this listener to handle buffered candidates
     peerConnection.current.addEventListener('setRemoteDescription', async () => {
-      for (const candidate of candidatesBuffer) {
+      for (const candidateString of candidatesBuffer) {
         try {
+          const candidateData = JSON.parse(candidateString);
+          const candidate = new RTCIceCandidate(candidateData);
           await peerConnection.current.addIceCandidate(candidate);
         } catch (error) {
           console.error('Error adding buffered ICE candidate:', error);
         }
       }
-      candidatesBuffer.length = 0;
+      candidatesBuffer.clear();
+    });
+  };
+
+  const handleAnswer = async (callId) => {
+    const callRef = firestore().collection('calls').doc(callId);
+  
+    // Use a flag to track if the answer has been handled
+    let answerHandled = false;
+  
+    const unsubscribe = callRef.onSnapshot(async (snapshot) => {
+      const data = snapshot.data();
+      if (
+        !answerHandled && // Only proceed if the answer hasn't been handled yet
+        data &&
+        data.answer &&
+        peerConnection.current.signalingState === 'have-local-offer'
+      ) {
+        try {
+          const answer = new RTCSessionDescription(data.answer);
+          await peerConnection.current.setRemoteDescription(answer);
+  
+          // Set the flag to true after successfully handling the answer
+          answerHandled = true;
+  
+          // Detach the listener to prevent further updates
+          unsubscribe(); 
+        } catch (error) {
+          console.error('Error handling answer:', error);
+          setErrorMessage('Error establishing connection. Please try again.');
+        }
+      }
     });
   };
 
