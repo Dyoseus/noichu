@@ -169,10 +169,10 @@ export default function VideoCallScreen() {
       };
     
       if (user.uid < matchedUserId) {
-        createOffer(callId);
-        handleAnswer(callId);
+        await createOffer(callId);
+        await handleAnswer(callId);
       } else {
-        listenForOffer(callId);
+        await listenForOffer(callId);
       }
     
       listenForICECandidates(callId);
@@ -184,11 +184,6 @@ export default function VideoCallScreen() {
 
   const createOffer = async (callId) => {
     try {
-      if (peerConnection.current.signalingState !== "stable") {
-        console.log("The connection isn't stable yet");
-        return;
-      }
-      
       const offer = await peerConnection.current.createOffer();
       await peerConnection.current.setLocalDescription(offer);
   
@@ -206,9 +201,9 @@ export default function VideoCallScreen() {
   
   const listenForOffer = async (callId) => {
     const callRef = firestore().collection('calls').doc(callId);
-    callRef.onSnapshot(async (snapshot) => {
+    const unsubscribe = callRef.onSnapshot(async (snapshot) => {
       const data = snapshot.data();
-      if (data && data.offer && peerConnection.current.signalingState === "stable") {
+      if (data && data.offer && !peerConnection.current.remoteDescription) {
         try {
           const offer = new RTCSessionDescription(data.offer);
           await peerConnection.current.setRemoteDescription(offer);
@@ -222,6 +217,8 @@ export default function VideoCallScreen() {
               sdp: answer.sdp
             }
           });
+  
+          unsubscribe(); // Stop listening after processing the offer
         } catch (error) {
           console.error("Error handling offer:", error);
           setErrorMessage("Error establishing connection. Please try again.");
@@ -276,31 +273,23 @@ export default function VideoCallScreen() {
   const handleAnswer = async (callId) => {
     const callRef = firestore().collection('calls').doc(callId);
   
-    // Use a flag to track if the answer has been handled
-    let answerHandled = false;
-  
-    const unsubscribe = callRef.onSnapshot(async (snapshot) => {
-      const data = snapshot.data();
-      if (
-        !answerHandled && // Only proceed if the answer hasn't been handled yet
-        data &&
-        data.answer &&
-        peerConnection.current.signalingState === 'have-local-offer'
-      ) {
-        try {
-          const answer = new RTCSessionDescription(data.answer);
-          await peerConnection.current.setRemoteDescription(answer);
-  
-          // Set the flag to true after successfully handling the answer
-          answerHandled = true;
-  
-          // Detach the listener to prevent further updates
-          unsubscribe(); 
-        } catch (error) {
-          console.error('Error handling answer:', error);
-          setErrorMessage('Error establishing connection. Please try again.');
+    return new Promise((resolve, reject) => {
+      const unsubscribe = callRef.onSnapshot(async (snapshot) => {
+        const data = snapshot.data();
+        if (data && data.answer && peerConnection.current.signalingState === 'have-local-offer') {
+          try {
+            const answer = new RTCSessionDescription(data.answer);
+            await peerConnection.current.setRemoteDescription(answer);
+            unsubscribe();
+            resolve();
+          } catch (error) {
+            console.error('Error handling answer:', error);
+            setErrorMessage('Error establishing connection. Please try again.');
+            unsubscribe();
+            reject(error);
+          }
         }
-      }
+      });
     });
   };
 
