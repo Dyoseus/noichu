@@ -1,3 +1,4 @@
+// VideoCallScreen.js
 import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, StyleSheet, Pressable, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -80,8 +81,8 @@ export default function VideoCallScreen() {
       const userData = userDoc.data();
   
       const unsubscribe = firestore().collection('matchQueue')
+        .where('gender', '==', userData.interestedIn[0]) // Assuming interestedIn array has at least one element
         .where('interestedIn', 'array-contains', userData.gender)
-        .where('gender', 'in', userData.interestedIn)
         .orderBy('timestamp')
         .limit(1)
         .onSnapshot(async (snapshot) => {
@@ -222,6 +223,7 @@ export default function VideoCallScreen() {
         } catch (error) {
           console.error("Error handling offer:", error);
           setErrorMessage("Error establishing connection. Please try again.");
+          unsubscribe();
         }
       }
     });

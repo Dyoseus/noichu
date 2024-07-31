@@ -45,7 +45,6 @@ exports.findMatch = functions.https.onCall(async (data, context) => {
     timestamp: admin.firestore.FieldValue.serverTimestamp(),
   });
 
-  // Listen for matches (this will be handled client-side)
   return { success: true };
 });
 
