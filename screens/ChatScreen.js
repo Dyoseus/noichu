@@ -153,18 +153,6 @@ export default function ChatScreen({ route, navigation }) {
     }
   };
 
-  useEffect(() => {
-    const chatDocRef = firestore().collection('chats').doc(chatId);
-
-    const unsubscribe = navigation.addListener('beforeRemove', () => {
-      updateDoc(chatDocRef, {
-        [`${user.uid === route.params.friendId ? 'user1Joined' : 'user2Joined'}`]: false,
-      });
-    });
-
-    return unsubscribe;
-  }, [chatId, navigation, route.params.friendId, user.uid]);
-
   return (
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 5 : 20}>
