@@ -83,7 +83,7 @@ export default function FriendsListScreen({ refresh, onFriendRemoved }) {
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <View style={styles.friendContainer}>
-            <Text style={styles.friendText}>{item.username}</Text>
+            <Text style={styles.friendText}>{item.firstName}</Text>
             <TouchableOpacity
               style={styles.removeButton}
               onPress={() => handleRemoveButtonPress(item)}
@@ -102,7 +102,7 @@ export default function FriendsListScreen({ refresh, onFriendRemoved }) {
         >
           <View style={styles.modalContainer}>
             <View style={styles.modalView}>
-              <Text style={styles.modalText}>Remove friend {selectedFriend.username}?</Text>
+              <Text style={styles.modalText}>Remove friend {selectedFriend.firstName}?</Text>
               <Button title="Remove" onPress={handleRemoveFriend} />
               <Button title="Cancel" onPress={closeModal} />
             </View>

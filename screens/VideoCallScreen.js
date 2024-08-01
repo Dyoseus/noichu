@@ -1,6 +1,6 @@
 // VideoCallScreen.js
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, Alert } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Alert, AppState } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
@@ -21,6 +21,7 @@ export default function VideoCallScreen() {
   const [callConnected, setCallConnected] = useState(false);
   const peerConnection = useRef(null);
   const navigation = useNavigation();
+  const appState = useRef(AppState.currentState);
 
   useEffect(() => {
     const unsubscribe = auth().onAuthStateChanged((user) => {
@@ -44,6 +45,28 @@ export default function VideoCallScreen() {
     }
     return () => clearTimeout(timer);
   }, [countdown, callConnected]);
+
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState) => {
+      if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
+        console.log('App has come to the foreground!');
+      } else if (appState.current === 'active' && nextAppState.match(/inactive|background/)) {
+        if (inQueue) {
+          leaveQueue();
+        }
+        if (callConnected) {
+          handleLeaveCall();
+        }
+      }
+      appState.current = nextAppState;
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+
+    return () => {
+      subscription.remove();
+    };
+  }, [inQueue, callConnected]);
 
   const requestAndStoreLocation = async (userId) => {
     try {
@@ -70,16 +93,16 @@ export default function VideoCallScreen() {
 
   const findMatch = async () => {
     if (!user) return;
-  
+
     setInQueue(true);
     try {
       const findMatchFunction = functions().httpsCallable('findMatch');
       await findMatchFunction();
-  
+
       const queueRef = firestore().collection('matchQueue').doc(user.uid);
       const userDoc = await firestore().collection('users').doc(user.uid).get();
       const userData = userDoc.data();
-  
+
       const unsubscribe = firestore().collection('matchQueue')
         .where('gender', '==', userData.interestedIn[0]) // Assuming interestedIn array has at least one element
         .where('interestedIn', 'array-contains', userData.gender)
@@ -92,7 +115,7 @@ export default function VideoCallScreen() {
               const matchData = matchDoc.data();
               if (matchData && matchData.userId) {
                 setMatchedUser(matchData);
-                
+
                 const callId = [user.uid, matchData.userId].sort().join('_');
                 setCallId(callId);
                 const callRef = firestore().collection('calls').doc(callId);
@@ -100,16 +123,16 @@ export default function VideoCallScreen() {
                   users: [user.uid, matchData.userId],
                   startedAt: firestore.FieldValue.serverTimestamp(),
                 });
-  
+
                 try {
                   await queueRef.delete();
                   await firestore().collection('matchQueue').doc(matchData.userId).delete();
                 } catch (error) {
                   console.error("Error removing users from queue:", error);
                 }
-  
+
                 unsubscribe();
-                
+
                 initializeWebRTC(callId, matchData.userId);
               }
             }
@@ -118,7 +141,7 @@ export default function VideoCallScreen() {
           console.error("Error in matchQueue snapshot:", error);
           setInQueue(false);
         });
-  
+
       return () => {
         unsubscribe();
         queueRef.delete().catch(error => console.error("Error removing user from queue:", error));
@@ -130,10 +153,27 @@ export default function VideoCallScreen() {
     }
   };
 
+  const leaveQueue = async () => {
+    if (!user) return;
+
+    try {
+      const queueRef = firestore().collection('matchQueue').doc(user.uid);
+      await queueRef.delete();
+      setInQueue(false);
+    } catch (error) {
+      console.error("Error leaving queue:", error);
+      setErrorMessage("Error leaving queue. Please try again.");
+    }
+  };
+
   const initializeWebRTC = async (callId, matchedUserId) => {
     try {
       const twilioToken = await functions().httpsCallable('getTwilioToken')();
       
+      if (peerConnection.current) {
+        peerConnection.current.close();
+      }
+
       peerConnection.current = new RTCPeerConnection({
         iceServers: twilioToken.data.iceServers,
       });
@@ -230,7 +270,11 @@ export default function VideoCallScreen() {
   };
 
   const sendICECandidate = async (callId, candidate) => {
-    await firestore().collection('calls').doc(callId).collection('iceCandidates').add(candidate);
+    try {
+      await firestore().collection('calls').doc(callId).collection('iceCandidates').add(candidate);
+    } catch (error) {
+      console.error('Error sending ICE candidate:', error);
+    }
   };
 
   const listenForICECandidates = async (callId) => {
@@ -350,7 +394,15 @@ export default function VideoCallScreen() {
           </Pressable>
         )}
         {inQueue && !callConnected && (
-          <Text style={styles.waitingText}>Waiting for a match...</Text>
+          <>
+            <Text style={styles.waitingText}>Waiting for a match...</Text>
+            <Pressable
+              style={[styles.button, styles.leaveButton]}
+              onPress={leaveQueue}
+            >
+              <Text style={styles.buttonText}>Leave Queue</Text>
+            </Pressable>
+          </>
         )}
         {callConnected && (
           <Pressable
