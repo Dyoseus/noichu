@@ -27,17 +27,55 @@ export default function PostCallScreen({ route }) {
     if (!currentUser || !userId) return;
 
     try {
+      const currentUserRef = firestore().collection('users').doc(currentUser.uid);
+      const otherUserRef = firestore().collection('users').doc(userId);
+
       if (vote === 'upvote') {
-        // Send friend request
+        // Record the upvote
+        await currentUserRef.update({
+          upvotes: firestore.FieldValue.arrayUnion(userId)
+        });
+
+        // Send a friend request
         await firestore().collection('friendRequests').add({
           from: currentUser.uid,
           to: userId,
           status: 'pending',
           timestamp: firestore.FieldValue.serverTimestamp(),
         });
+
+        // Check if the other user has also sent a friend request to this user
+        const friendRequestSnapshot = await firestore().collection('friendRequests')
+          .where('from', '==', userId)
+          .where('to', '==', currentUser.uid)
+          .where('status', '==', 'pending')
+          .get();
+
+        if (!friendRequestSnapshot.empty) {
+          // Both users have sent friend requests to each other, confirm friendship
+          await firestore().collection('friends').add({
+            users: [currentUser.uid, userId],
+            createdAt: firestore.FieldValue.serverTimestamp()
+          });
+
+          // Remove pending friend requests
+          const friendRequests = await firestore().collection('friendRequests')
+            .where('from', 'in', [currentUser.uid, userId])
+            .where('to', 'in', [currentUser.uid, userId])
+            .get();
+
+          friendRequests.forEach(async (doc) => {
+            await doc.ref.delete();
+          });
+        }
+
         console.log('Friend request sent');
       } else {
-        // Downvote doesn't send a friend request
+        // Record the downvote
+        await currentUserRef.update({
+          downvotes: firestore.FieldValue.arrayUnion(userId)
+        });
+
         console.log('Downvoted');
       }
 
@@ -64,13 +102,13 @@ export default function PostCallScreen({ route }) {
           style={[styles.button, styles.upvoteButton]}
           onPress={() => handleVote('upvote')}
         >
-          <Text style={styles.buttonText}>Upvote</Text>
+          <Text style={styles.buttonText}>❤️</Text>
         </Pressable>
         <Pressable
           style={[styles.button, styles.downvoteButton]}
           onPress={() => handleVote('downvote')}
         >
-          <Text style={styles.buttonText}>Downvote</Text>
+          <Text style={styles.buttonText}>🗑️</Text>
         </Pressable>
       </View>
     </View>
