@@ -6,7 +6,7 @@ import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import functions from '@react-native-firebase/functions';
 import { RTCPeerConnection, RTCIceCandidate, RTCSessionDescription, mediaDevices, RTCView } from 'react-native-webrtc';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useIsFocused } from '@react-navigation/native';
 import * as Location from 'expo-location';
 
 export default function VideoCallScreen() {
@@ -22,6 +22,7 @@ export default function VideoCallScreen() {
   const peerConnection = useRef(null);
   const navigation = useNavigation();
   const appState = useRef(AppState.currentState);
+  const isFocused = useIsFocused();
 
   useEffect(() => {
     const unsubscribe = auth().onAuthStateChanged((user) => {
@@ -67,6 +68,22 @@ export default function VideoCallScreen() {
       subscription.remove();
     };
   }, [inQueue, callConnected]);
+
+  useEffect(() => {
+    let unsubscribe;
+    if (callId && isFocused) {
+      unsubscribe = firestore().collection('calls').doc(callId)
+        .onSnapshot((snapshot) => {
+          const data = snapshot.data();
+          if (data && data.status === 'ended') {
+            handleCallEnded();
+          }
+        });
+    }
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [callId, isFocused]);
 
   const requestAndStoreLocation = async (userId) => {
     try {
@@ -170,10 +187,6 @@ export default function VideoCallScreen() {
     try {
       const twilioToken = await functions().httpsCallable('getTwilioToken')();
       
-      if (peerConnection.current) {
-        peerConnection.current.close();
-      }
-
       peerConnection.current = new RTCPeerConnection({
         iceServers: twilioToken.data.iceServers,
       });
@@ -339,28 +352,38 @@ export default function VideoCallScreen() {
     });
   };
 
+  const handleCallEnded = () => {
+    if (localStream) {
+      localStream.getTracks().forEach(track => track.stop());
+    }
+    if (peerConnection.current) {
+      peerConnection.current.close();
+    }
+    setLocalStream(null);
+    setRemoteStream(null);
+    setMatchedUser(null);
+    setInQueue(false);
+    setCallId(null);
+    setCallConnected(false);
+    setCountdown(60);
+
+    navigation.navigate('PostCall', { userId: matchedUser?.userId });
+  };
+
   const handleLeaveCall = async () => {
     try {
       if (callId) {
         const leaveCall = functions().httpsCallable('leaveCall');
         await leaveCall({ callId });
+        
+        // Update call status in Firestore
+        await firestore().collection('calls').doc(callId).update({
+          status: 'ended',
+          endedAt: firestore.FieldValue.serverTimestamp(),
+        });
       }
-  
-      if (localStream) {
-        localStream.getTracks().forEach(track => track.stop());
-      }
-      if (peerConnection.current) {
-        peerConnection.current.close();
-      }
-      setLocalStream(null);
-      setRemoteStream(null);
-      setMatchedUser(null);
-      setInQueue(false);
-      setCallId(null);
-      setCallConnected(false);
-      setCountdown(60);
-  
-      navigation.navigate('PostCall', { userId: matchedUser?.userId });
+      
+      handleCallEnded();
     } catch (error) {
       console.error("Error leaving call:", error);
       setErrorMessage("Error ending call. Please try again.");
