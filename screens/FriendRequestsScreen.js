@@ -32,7 +32,7 @@ export default function FriendRequestsScreen({ refresh, onFriendAccepted }) {
           requestsList.push({
             id: docSnapshot.id,
             from: request.from,
-            fromUsername: fromUserDoc.data().username,
+            fromUsername: fromUserDoc.data().firstName,
           });
         }
       }

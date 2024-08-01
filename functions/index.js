@@ -62,6 +62,7 @@ exports.leaveCall = functions.https.onCall(async (data, context) => {
 
   const callRef = db.collection('calls').doc(callId);
   await callRef.update({
+    ended: true,
     endedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 
