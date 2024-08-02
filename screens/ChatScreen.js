@@ -13,9 +13,7 @@ import {
   Image,
   ActivityIndicator,
 } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
 import firestore from '@react-native-firebase/firestore';
-import storage from '@react-native-firebase/storage';
 import auth from '@react-native-firebase/auth';
 
 const MESSAGES_PER_PAGE = 20; 
@@ -32,20 +30,7 @@ export default function ChatScreen({ route, navigation }) {
   const flatListRef = useRef(null);
   const queueTimeoutRef = useRef(null);
   const user = auth().currentUser;
-  const [image, setImage] = useState(null);
-  const [uploading, setUploading] = useState(false); // Track uploading state
   const [friendProfilePic, setFriendProfilePic] = useState(null);
-
-  useEffect(() => {
-    (async () => {
-      if (Platform.OS !== 'web') {
-        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== 'granted') {
-          alert('Sorry, we need camera roll permissions to make this work!');
-        }
-      }
-    })();
-  }, []);
 
   useEffect(() => {
     const fetchFriendData = async () => {
@@ -97,35 +82,14 @@ export default function ChatScreen({ route, navigation }) {
   };
 
   const handleSendMessage = async () => {
-    if (newMessage.trim() === '' && !image) return;
+    if (newMessage.trim() === '') return;
 
     const messagesRef = firestore().collection('chats').doc(chatId).collection('messages');
     const messageData = {
       sender: user.uid,
       timestamp: new Date(),
+      text: newMessage.trim(),
     };
-
-    if (newMessage.trim() !== '') {
-      messageData.text = newMessage;
-    }
-
-    if (image) {
-      setUploading(true);
-      try {
-        const storageRef = storage().ref(`images/${Date.now()}_${user.uid}.jpg`);
-        const response = await fetch(image.uri);
-        const blob = await response.blob();
-
-        await storageRef.put(blob);
-        const downloadURL = await storageRef.getDownloadURL();
-        messageData.imageUrl = downloadURL;
-        setImage(null);
-      } catch (error) {
-        console.error("Error uploading image: ", error);
-      } finally {
-        setUploading(false);
-      }
-    }
 
     await messagesRef.add(messageData);
     setNewMessage('');
@@ -133,24 +97,6 @@ export default function ChatScreen({ route, navigation }) {
 
   const handleFindNewChat = () => {
     navigation.navigate('Home', { autoQueue: true });
-  };
-
-  const handleSelectImage = async () => {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 0.2,
-      });
-
-      if (!result.canceled) {
-        const source = { uri: result.assets[0].uri };
-        setImage(source);
-      }
-    } catch (error) {
-      console.error("Error selecting image: ", error);
-    }
   };
 
   return (
@@ -171,11 +117,7 @@ export default function ChatScreen({ route, navigation }) {
           data={messages}
           renderItem={({ item }) => (
             <View style={[styles.messageContainer, item.sender === user.uid ? styles.userMessage : styles.otherMessage]}>
-              {item.text ? (
-                <Text style={[styles.messageText, item.sender === user.uid ? styles.userMessageText : null]}>{item.text}</Text>
-              ) : (
-                <Image source={{ uri: item.imageUrl }} style={styles.messageImage} />
-              )}
+              <Text style={[styles.messageText, item.sender === user.uid ? styles.userMessageText : null]}>{item.text}</Text>
               <Text style={styles.timestamp}>{new Date(item.timestamp.seconds * 1000).toLocaleTimeString()}</Text>
             </View>
           )}
@@ -187,18 +129,7 @@ export default function ChatScreen({ route, navigation }) {
             }
           }}
         />
-        {image && (
-          <View style={styles.imagePreviewContainer}>
-            <Image source={{ uri: image.uri }} style={styles.imagePreview} />
-            <Pressable onPress={() => setImage(null)} style={styles.removeImageButton}>
-              <Text style={styles.removeImageButtonText}>Remove</Text>
-            </Pressable>
-          </View>
-        )}
         <View style={styles.inputContainer}>
-          <Pressable style={styles.imageButton} onPress={handleSelectImage}>
-            <Text style={styles.imageButtonText}>🖼️</Text>
-          </Pressable>
           <TextInput
             style={styles.input}
             value={newMessage}
@@ -320,41 +251,5 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: '#c7c7c7',
     alignSelf: 'flex-end',
-  },
-  imageButton: {
-    backgroundColor: '#2f4f4f',
-    paddingVertical: 10,
-    paddingHorizontal: 15,
-    borderRadius: 30,
-    marginRight: 5,
-    marginLeft: 5,
-  },
-  imageButtonText: {
-    color: '#fff',
-  },
-  messageImage: {
-    width: 200,
-    height: 200,
-    borderRadius: 10,
-  },
-  imagePreviewContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  imagePreview: {
-    width: 100,
-    height: 100,
-    borderRadius: 10,
-    marginRight: 10,
-  },
-  removeImageButton: {
-    backgroundColor: '#ff4444',
-    padding: 10,
-    borderRadius: 5,
-  },
-  removeImageButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
   },
 });

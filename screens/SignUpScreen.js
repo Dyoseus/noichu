@@ -19,9 +19,6 @@ import Slider from '@react-native-community/slider';
 import * as ImagePicker from 'expo-image-picker';
 import { ActivityIndicator } from 'react-native';
 
-
-
-
 export default function SignUpScreen({ navigation }) {
   const [step, setStep] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
