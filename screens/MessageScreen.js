@@ -3,58 +3,57 @@ import { View, Text, FlatList, StyleSheet, TouchableOpacity } from 'react-native
 import { SafeAreaView } from 'react-native-safe-area-context';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 
 export default function MessageScreen() {
   const [friends, setFriends] = useState([]);
   const currentUser = auth().currentUser;
   const navigation = useNavigation();
 
-  useEffect(() => {
-    const fetchFriends = async () => {
-      if (!currentUser) return;
+  const fetchFriends = async () => {
+    if (!currentUser) return;
 
-      const friendsQuery1 = firestore().collection('friends')
-        .where('user1', '==', currentUser.uid)
-        .where('status', '==', 'accepted');
-      const friendsQuery2 = firestore().collection('friends')
-        .where('user2', '==', currentUser.uid)
-        .where('status', '==', 'accepted');
-        
-      const [snapshot1, snapshot2] = await Promise.all([friendsQuery1.get(), friendsQuery2.get()]);
+    const friendsQuery = firestore().collection('friends')
+      .where('users', 'array-contains', currentUser.uid);
+      
+    const snapshot = await friendsQuery.get();
 
-      const friendPromises = [];
-      snapshot1.forEach(docSnapshot => friendPromises.push(getFriendData(docSnapshot.data().user2)));
-      snapshot2.forEach(docSnapshot => friendPromises.push(getFriendData(docSnapshot.data().user1)));
+    const friendPromises = snapshot.docs.map(async (doc) => {
+      const friendId = doc.data().users.find(id => id !== currentUser.uid);
+      return getFriendData(friendId);
+    });
 
-      const friendsList = await Promise.all(friendPromises);
-      setFriends(friendsList);
-    };
+    const friendsList = await Promise.all(friendPromises);
+    setFriends(friendsList.filter(friend => friend !== null));
+  };
 
-    const getFriendData = async (friendId) => {
-      const friendDoc = await firestore().collection('users').doc(friendId).get();
-      if (friendDoc.exists) {
-        const chatId = [currentUser.uid, friendId].sort().join('_');
-        const latestMessageDoc = await firestore().collection('chats').doc(chatId).collection('messages')
-          .orderBy('timestamp', 'desc')
-          .limit(1)
-          .get();
-        let latestMessage = '';
-        if (!latestMessageDoc.empty) {
-          latestMessage = latestMessageDoc.docs[0].data().text;
-        }
-        return {
-          id: friendId,
-          username: friendDoc.data().username,
-          latestMessage,
-          chatId,
-        };
+  const getFriendData = async (friendId) => {
+    const friendDoc = await firestore().collection('users').doc(friendId).get();
+    if (friendDoc.exists) {
+      const chatId = [currentUser.uid, friendId].sort().join('_');
+      const latestMessageDoc = await firestore().collection('chats').doc(chatId).collection('messages')
+        .orderBy('timestamp', 'desc')
+        .limit(1)
+        .get();
+      let latestMessage = '';
+      if (!latestMessageDoc.empty) {
+        latestMessage = latestMessageDoc.docs[0].data().text;
       }
-      return null;
-    };
+      return {
+        id: friendId,
+        username: friendDoc.data().firstName,
+        latestMessage,
+        chatId,
+      };
+    }
+    return null;
+  };
 
-    fetchFriends();
-  }, [currentUser]);
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchFriends();
+    }, [currentUser])
+  );
 
   const handlePress = (friend) => {
     navigation.navigate('Chat', { friendId: friend.id, friendName: friend.username, chatId: friend.chatId });

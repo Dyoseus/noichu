@@ -6,6 +6,7 @@ import * as ImagePicker from 'expo-image-picker';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
+import Slider from '@react-native-community/slider';
 
 export default function ProfileScreen({ navigation }) {
   const [userData, setUserData] = useState({
@@ -123,8 +124,20 @@ export default function ProfileScreen({ navigation }) {
 
   const saveProfile = async (updatedProfile) => {
     try {
-      await firestore().collection('users').doc(auth().currentUser.uid).update(updatedProfile);
-      setUserData(updatedProfile);
+      await firestore().collection('users').doc(auth().currentUser.uid).update({
+        email: updatedProfile.email,
+        gender: updatedProfile.gender,
+        sexualOrientation: updatedProfile.sexualOrientation,
+        school: updatedProfile.school,
+        hobbies: updatedProfile.hobbies,
+        lifestyleHabits: updatedProfile.lifestyleHabits,
+        interestedIn: updatedProfile.interestedIn,
+        maxDistance: updatedProfile.maxDistance,
+      });
+      setUserData(prevData => ({
+        ...prevData,
+        ...updatedProfile
+      }));
       setModalVisible(false);
     } catch (error) {
       alert(error.message);
@@ -201,8 +214,8 @@ export default function ProfileScreen({ navigation }) {
           <Text>Lifestyle Habits: {userData.lifestyleHabits ? userData.lifestyleHabits.join(', ') : 'Not set'}</Text>
 
           <Text style={styles.infoTitle}>Preferences</Text>
-          <Text>Interested In: {userData.interestedIn ? userData.interestedIn.join(', ') : 'Not set'}</Text>
-          <Text>Max Distance: {userData.maxDistance ? `${userData.maxDistance} miles` : 'Not set'}</Text>
+          <Text>Interested In: {Array.isArray(userData.interestedIn) && userData.interestedIn.length > 0 ? userData.interestedIn.join(', ') : 'Not set'}</Text>
+          <Text>Preferred Distance: {userData.maxDistance ? `${userData.maxDistance} miles` : 'Not set'}</Text>
         </View>
 
         <Modal
@@ -241,43 +254,37 @@ export default function ProfileScreen({ navigation }) {
 }
 
 const EditProfileForm = ({ userData, onCancel, onSave }) => {
-  const [newFirstName, setNewFirstName] = useState(userData.firstName);
-  const [newGender, setNewGender] = useState(userData.gender);
-  const [newPhone, setNewPhone] = useState(userData.phoneNumber);
-  const [newAge, setNewAge] = useState(userData.age);
-  const [newSexualOrientation, setNewSexualOrientation] = useState(userData.sexualOrientation);
-  const [newHobbies, setNewHobbies] = useState(userData.hobbies.join(', '));
-  const [newMeet, setNewMeet] = useState(userData.meet.join(', '));
-  const [newFind, setNewFind] = useState(userData.find.join(', '));
-  const [newMinAge, setNewMinAge] = useState(userData.ageRange.min);
-  const [newMaxAge, setNewMaxAge] = useState(userData.ageRange.max);
-  const [newLocation, setNewLocation] = useState(userData.location);
-  const [newLocationRadius, setNewLocationRadius] = useState(userData.locationRadius);
+  const [newEmail, setNewEmail] = useState(userData.email || '');
+  const [newGender, setNewGender] = useState(userData.gender || '');
+  const [newSexualOrientation, setNewSexualOrientation] = useState(userData.sexualOrientation || '');
+  const [newSchool, setNewSchool] = useState(userData.school || '');
+  const [newHobbies, setNewHobbies] = useState(userData.hobbies ? userData.hobbies.join(', ') : '');
+  const [newLifestyleHabits, setNewLifestyleHabits] = useState(userData.lifestyleHabits ? userData.lifestyleHabits.join(', ') : '');
+  const [newInterestedIn, setNewInterestedIn] = useState(userData.interestedIn ? userData.interestedIn.join(', ') : '');
+  const [newMaxDistance, setNewMaxDistance] = useState(userData.maxDistance || 50);
 
   const handleSave = () => {
     onSave({
-      firstName: newFirstName,
+      email: newEmail,
       gender: newGender,
-      phoneNumber: newPhone,
-      age: newAge,
       sexualOrientation: newSexualOrientation,
+      school: newSchool,
       hobbies: newHobbies.split(',').map(item => item.trim()),
-      meet: newMeet.split(',').map(item => item.trim()),
-      find: newFind.split(',').map(item => item.trim()),
-      ageRange: { min: newMinAge, max: newMaxAge },
-      location: newLocation,
-      locationRadius: newLocationRadius,
+      lifestyleHabits: newLifestyleHabits.split(',').map(item => item.trim()),
+      interestedIn: newInterestedIn.split(',').map(item => item.trim()),
+      maxDistance: newMaxDistance,
     });
   };
 
   return (
     <View style={styles.editProfileForm}>
-      <Text>First Name</Text>
+      <Text>Email</Text>
       <TextInput
         style={styles.input}
-        value={newFirstName}
-        onChangeText={setNewFirstName}
-        placeholder="Enter first name"
+        value={newEmail}
+        onChangeText={setNewEmail}
+        placeholder="Enter email"
+        keyboardType="email-address"
       />
 
       <Text>Gender</Text>
@@ -288,30 +295,20 @@ const EditProfileForm = ({ userData, onCancel, onSave }) => {
         placeholder="Enter gender"
       />
 
-      <Text>Phone Number</Text>
-      <TextInput
-        style={styles.input}
-        value={newPhone}
-        onChangeText={setNewPhone}
-        placeholder="Enter phone number"
-        keyboardType="phone-pad"
-      />
-
-      <Text>Age</Text>
-      <TextInput
-        style={styles.input}
-        value={newAge}
-        onChangeText={setNewAge}
-        placeholder="Enter age"
-        keyboardType="numeric"
-      />
-
       <Text>Sexual Orientation</Text>
       <TextInput
         style={styles.input}
         value={newSexualOrientation}
         onChangeText={setNewSexualOrientation}
         placeholder="Enter sexual orientation"
+      />
+
+      <Text>School</Text>
+      <TextInput
+        style={styles.input}
+        value={newSchool}
+        onChangeText={setNewSchool}
+        placeholder="Enter school"
       />
 
       <Text>Hobbies (comma separated)</Text>
@@ -322,56 +319,35 @@ const EditProfileForm = ({ userData, onCancel, onSave }) => {
         placeholder="Enter hobbies"
       />
 
-      <Text>Meet Preferences (comma separated)</Text>
+      <Text>Lifestyle Habits (comma separated)</Text>
       <TextInput
         style={styles.input}
-        value={newMeet}
-        onChangeText={setNewMeet}
-        placeholder="Enter meet preferences"
+        value={newLifestyleHabits}
+        onChangeText={setNewLifestyleHabits}
+        placeholder="Enter lifestyle habits"
       />
 
-      <Text>Find Preferences (comma separated)</Text>
+      <Text>Interested In (comma separated)</Text>
       <TextInput
         style={styles.input}
-        value={newFind}
-        onChangeText={setNewFind}
-        placeholder="Enter find preferences"
+        value={newInterestedIn}
+        onChangeText={setNewInterestedIn}
+        placeholder="Enter interests"
       />
 
-      <Text>Minimum Age</Text>
-      <TextInput
-        style={styles.input}
-        value={newMinAge}
-        onChangeText={setNewMinAge}
-        placeholder="Enter minimum age"
-        keyboardType="numeric"
+      <Text>Maximum Distance (miles)</Text>
+      <Slider
+        style={{width: '100%', height: 40}}
+        minimumValue={1}
+        maximumValue={100}
+        step={1}
+        value={newMaxDistance}
+        onValueChange={(value) => setNewMaxDistance(value)}
+        minimumTrackTintColor="#2f4f4f"
+        maximumTrackTintColor="#d3d3d3"
+        thumbTintColor="#2f4f4f"
       />
-
-      <Text>Maximum Age</Text>
-      <TextInput
-        style={styles.input}
-        value={newMaxAge}
-        onChangeText={setNewMaxAge}
-        placeholder="Enter maximum age"
-        keyboardType="numeric"
-      />
-
-      <Text>Location</Text>
-      <TextInput
-        style={styles.input}
-        value={newLocation}
-        onChangeText={setNewLocation}
-        placeholder="Enter location"
-      />
-
-      <Text>Location Radius</Text>
-      <TextInput
-        style={styles.input}
-        value={newLocationRadius}
-        onChangeText={setNewLocationRadius}
-        placeholder="Enter location radius"
-        keyboardType="numeric"
-      />
+      <Text>{Math.round(newMaxDistance)} miles</Text>
 
       <Pressable style={styles.saveButton} onPress={handleSave}>
         <Text style={styles.saveButtonText}>Save</Text>
