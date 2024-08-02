@@ -2,53 +2,44 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, FlatList, StyleSheet, TouchableOpacity, Modal, Button } from 'react-native';
 import firestore from '@react-native-firebase/firestore';
 import auth from '@react-native-firebase/auth';
+import { useFocusEffect } from '@react-navigation/native';
 
 export default function FriendsListScreen({ refresh, onFriendRemoved }) {
   const [friends, setFriends] = useState([]);
   const [selectedFriend, setSelectedFriend] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
-  const [currentUser, setCurrentUser] = useState(null);
+  const currentUser = auth().currentUser;
 
-  useEffect(() => {
-    const unsubscribe = auth().onAuthStateChanged((user) => {
-      setCurrentUser(user);
-    });
-    return () => unsubscribe();
-  }, []);
-
-  useEffect(() => {
+  const fetchFriends = async () => {
     if (!currentUser) return;
 
-    const fetchFriends = async () => {
-      const friendsQuery1 = firestore().collection('friends')
-        .where('user1', '==', currentUser.uid)
-        .where('status', '==', 'accepted');
-      const friendsQuery2 = firestore().collection('friends')
-        .where('user2', '==', currentUser.uid)
-        .where('status', '==', 'accepted');
+    const friendsQuery = firestore().collection('friends')
+      .where('users', 'array-contains', currentUser.uid);
       
-      const [snapshot1, snapshot2] = await Promise.all([friendsQuery1.get(), friendsQuery2.get()]);
-      const friendsList = [];
+    const snapshot = await friendsQuery.get();
 
-      snapshot1.forEach(docSnapshot => friendsList.push(docSnapshot.data().user2));
-      snapshot2.forEach(docSnapshot => friendsList.push(docSnapshot.data().user1));
+    const friendPromises = snapshot.docs.map(async (doc) => {
+      const friendId = doc.data().users.find(id => id !== currentUser.uid);
+      const friendDoc = await firestore().collection('users').doc(friendId).get();
+      if (friendDoc.exists) {
+        return {
+          id: friendId,
+          firstName: friendDoc.data().firstName,
+        };
+      }
+      return null;
+    });
 
-      const friendDetailsPromises = friendsList.map(friendId => 
-        firestore().collection('users').doc(friendId).get()
-      );
-      const friendDetailsSnapshots = await Promise.all(friendDetailsPromises);
+    const friendsList = await Promise.all(friendPromises);
+    setFriends(friendsList.filter(friend => friend !== null));
+  };
 
-      const updatedFriends = friendDetailsSnapshots.map(doc => ({
-        id: doc.id,
-        phoneNumber: doc.data().phoneNumber,
-      }));
-
-      setFriends(updatedFriends);
-    };
-
-    fetchFriends();
-  }, [currentUser, refresh]);
-
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchFriends();
+    }, [currentUser, refresh])
+  );
+  
   const handleRemoveButtonPress = (friend) => {
     setSelectedFriend(friend);
     setModalVisible(true);
@@ -83,7 +74,7 @@ export default function FriendsListScreen({ refresh, onFriendRemoved }) {
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <View style={styles.friendContainer}>
-            <Text style={styles.friendText}>{item.username}</Text>
+            <Text style={styles.friendText}>{item.firstName}</Text>
             <TouchableOpacity
               style={styles.removeButton}
               onPress={() => handleRemoveButtonPress(item)}
@@ -102,7 +93,7 @@ export default function FriendsListScreen({ refresh, onFriendRemoved }) {
         >
           <View style={styles.modalContainer}>
             <View style={styles.modalView}>
-              <Text style={styles.modalText}>Remove friend {selectedFriend.username}?</Text>
+              <Text style={styles.modalText}>Remove friend {selectedFriend.firstName}?</Text>
               <Button title="Remove" onPress={handleRemoveFriend} />
               <Button title="Cancel" onPress={closeModal} />
             </View>

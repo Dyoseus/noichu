@@ -9,7 +9,6 @@ import { createMaterialTopTabNavigator } from '@react-navigation/material-top-ta
 import LoginScreen from './screens/LoginScreen';
 import SignUpScreen from './screens/SignUpScreen';
 import FriendsListScreen from './screens/FriendsListScreen';
-import FriendRequestsScreen from './screens/FriendRequestsScreen';
 import HomeScreen from './screens/HomeScreen';
 import MessageScreen from './screens/MessageScreen';
 import ChatScreen from './screens/ChatScreen';
@@ -68,15 +67,19 @@ function SearchTabNavigator() {
         <TopTab.Screen name="My Friends">
           {() => <FriendsListScreen refresh={refreshFriends} onFriendRemoved={handleFriendRemoved} />}
         </TopTab.Screen>
-        <TopTab.Screen name="Requests">
-          {() => <FriendRequestsScreen refresh={refreshRequests} onFriendAccepted={handleFriendAccepted} />}
-        </TopTab.Screen>
+        
       </TopTab.Navigator>
     </SafeAreaView>
   );
 }
 
 function AppTabs() {
+  const [refreshFriends, setRefreshFriends] = useState(false);
+
+  const handleFriendListChange = () => {
+    setRefreshFriends(!refreshFriends);
+  };
+
   return (
     <Tab.Navigator
       screenOptions={{
@@ -88,8 +91,12 @@ function AppTabs() {
       }}
     >
       <Tab.Screen name="Video" component={VideoCallScreen} />
-      <Tab.Screen name="Friends" component={SearchTabNavigator} />
-      <Tab.Screen name="Messages" component={MessageScreen} />
+      <Tab.Screen name="Friends">
+        {() => <FriendsListScreen refresh={refreshFriends} onFriendRemoved={handleFriendListChange} />}
+      </Tab.Screen>
+      <Tab.Screen name="Messages">
+        {() => <MessageScreen refresh={refreshFriends} />}
+      </Tab.Screen>
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
   );
