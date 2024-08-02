@@ -110,16 +110,16 @@ export default function VideoCallScreen() {
 
   const findMatch = async () => {
     if (!user) return;
-
+  
     setInQueue(true);
     try {
       const findMatchFunction = functions().httpsCallable('findMatch');
       await findMatchFunction();
-
+  
       const queueRef = firestore().collection('matchQueue').doc(user.uid);
       const userDoc = await firestore().collection('users').doc(user.uid).get();
       const userData = userDoc.data();
-
+  
       const unsubscribe = firestore().collection('matchQueue')
         .where('gender', '==', userData.interestedIn[0]) // Assuming interestedIn array has at least one element
         .where('interestedIn', 'array-contains', userData.gender)
@@ -131,8 +131,22 @@ export default function VideoCallScreen() {
             if (matchDoc && matchDoc.id !== user.uid) {
               const matchData = matchDoc.data();
               if (matchData && matchData.userId) {
+                // Check if the user has already been matched with this person
+                const pastMatches = userData.pastMatches || [];
+                if (pastMatches.includes(matchData.userId)) {
+                  console.log('Already matched with this user, finding another match...');
+                  return;
+                }
+  
+                // Additional check to ensure the matched user is still in the queue
+                const matchQueueDoc = await firestore().collection('matchQueue').doc(matchData.userId).get();
+                if (!matchQueueDoc.exists) {
+                  console.log('Matched user has left the queue, finding another match...');
+                  return;
+                }
+  
                 setMatchedUser(matchData);
-
+  
                 const callId = [user.uid, matchData.userId].sort().join('_');
                 setCallId(callId);
                 const callRef = firestore().collection('calls').doc(callId);
@@ -140,16 +154,24 @@ export default function VideoCallScreen() {
                   users: [user.uid, matchData.userId],
                   startedAt: firestore.FieldValue.serverTimestamp(),
                 });
-
+  
                 try {
                   await queueRef.delete();
                   await firestore().collection('matchQueue').doc(matchData.userId).delete();
                 } catch (error) {
                   console.error("Error removing users from queue:", error);
                 }
-
+  
+                // Update past matches for both users
+                await firestore().collection('users').doc(user.uid).update({
+                  pastMatches: firestore.FieldValue.arrayUnion(matchData.userId)
+                });
+                await firestore().collection('users').doc(matchData.userId).update({
+                  pastMatches: firestore.FieldValue.arrayUnion(user.uid)
+                });
+  
                 unsubscribe();
-
+  
                 initializeWebRTC(callId, matchData.userId);
               }
             }
@@ -158,7 +180,7 @@ export default function VideoCallScreen() {
           console.error("Error in matchQueue snapshot:", error);
           setInQueue(false);
         });
-
+  
       return () => {
         unsubscribe();
         queueRef.delete().catch(error => console.error("Error removing user from queue:", error));
