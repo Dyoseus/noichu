@@ -1,10 +1,13 @@
 // PostCallScreen.js
 
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Image, Dimensions } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
+import Swiper from 'react-native-swiper';
+
+const { width } = Dimensions.get('window');
 
 export default function PostCallScreen({ route }) {
   const { userId } = route.params;
@@ -97,6 +100,21 @@ export default function PostCallScreen({ route }) {
   return (
     <View style={styles.container}>
       <Text style={styles.username}>{otherUserProfile.firstName}</Text>
+      <View style={styles.swiperContainer}>
+        <Swiper 
+          style={styles.wrapper} 
+          showsButtons={true}
+          loop={false}
+          dot={<View style={styles.dot} />}
+          activeDot={<View style={styles.activeDot} />}
+        >
+          {otherUserProfile.pictures && otherUserProfile.pictures.map((picture, index) => (
+            <View style={styles.slide} key={index}>
+              <Image source={{ uri: picture }} style={styles.image} />
+            </View>
+          ))}
+        </Swiper>
+      </View>
       <View style={styles.buttonContainer}>
         <Pressable
           style={[styles.button, styles.upvoteButton]}
@@ -132,6 +150,42 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 18,
     color: '#fff',
+  },
+  swiperContainer: {
+    height: 400,
+    width: width - 32,
+  },
+  wrapper: {},
+  slide: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  image: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+    borderRadius: 10,
+  },
+  dot: {
+    backgroundColor: 'rgba(255,255,255,.3)',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginLeft: 3,
+    marginRight: 3,
+    marginTop: 3,
+    marginBottom: 3,
+  },
+  activeDot: {
+    backgroundColor: '#fff',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginLeft: 3,
+    marginRight: 3,
+    marginTop: 3,
+    marginBottom: 3,
   },
   buttonContainer: {
     flexDirection: 'row',
