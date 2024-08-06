@@ -24,6 +24,29 @@ exports.getTwilioToken = functions.https.onCall(async (data, context) => {
   }
 });
 
+exports.leaveQueue = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated.');
+  }
+
+  const userId = context.auth.uid;
+
+  try {
+    const queueRef = db.collection('matchQueue').doc(userId);
+    const queueDoc = await queueRef.get();
+
+    if (queueDoc.exists) {
+      await queueRef.delete();
+      return { success: true };
+    } else {
+      return { success: false, message: 'User not found in queue' };
+    }
+  } catch (error) {
+    console.error('Error leaving queue:', error);
+    throw new functions.https.HttpsError('internal', 'Unable to leave queue');
+  }
+});
+
 exports.findMatch = functions.https.onCall(async (data, context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated.');

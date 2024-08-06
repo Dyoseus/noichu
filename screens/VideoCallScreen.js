@@ -1,6 +1,6 @@
 // VideoCallScreen.js
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, Alert, AppState } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Alert, AppState, ActivityIndicator  } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
@@ -23,6 +23,7 @@ export default function VideoCallScreen() {
   const navigation = useNavigation();
   const appState = useRef(AppState.currentState);
   const isFocused = useIsFocused();
+  const [queueStatus, setQueueStatus] = useState('');
 
   useEffect(() => {
     const unsubscribe = auth().onAuthStateChanged((user) => {
@@ -111,10 +112,12 @@ export default function VideoCallScreen() {
   const findMatch = async () => {
     if (!user) return;
   
+    setQueueStatus('Joining Queue...');
     setInQueue(true);
     try {
       const findMatchFunction = functions().httpsCallable('findMatch');
       await findMatchFunction();
+      setQueueStatus('In Queue');
   
       const queueRef = firestore().collection('matchQueue').doc(user.uid);
       const userDoc = await firestore().collection('users').doc(user.uid).get();
@@ -131,6 +134,16 @@ export default function VideoCallScreen() {
             if (matchDoc && matchDoc.id !== user.uid) {
               const matchData = matchDoc.data();
               if (matchData && matchData.userId) {
+                // Check if the current user is still in the queue
+                const currentUserQueueDoc = await queueRef.get();
+                if (!currentUserQueueDoc.exists) {
+                  console.log('Current user has left the queue');
+                  unsubscribe();
+                  setInQueue(false);
+                  setQueueStatus('');
+                  return;
+                }
+  
                 // Check if the user has already been matched with this person
                 const pastMatches = userData.pastMatches || [];
                 if (pastMatches.includes(matchData.userId)) {
@@ -171,6 +184,8 @@ export default function VideoCallScreen() {
                 });
   
                 unsubscribe();
+                setInQueue(false);
+                setQueueStatus('');
   
                 initializeWebRTC(callId, matchData.userId);
               }
@@ -179,6 +194,8 @@ export default function VideoCallScreen() {
         }, (error) => {
           console.error("Error in matchQueue snapshot:", error);
           setInQueue(false);
+          setQueueStatus('');
+          setErrorMessage("Error in queue. Please try again.");
         });
   
       return () => {
@@ -188,6 +205,7 @@ export default function VideoCallScreen() {
     } catch (error) {
       console.error("Error finding match:", error);
       setInQueue(false);
+      setQueueStatus('');
       setErrorMessage("Error finding match. Please try again.");
     }
   };
@@ -195,12 +213,15 @@ export default function VideoCallScreen() {
   const leaveQueue = async () => {
     if (!user) return;
 
+    setQueueStatus('Trying to leave queue...');
     try {
-      const queueRef = firestore().collection('matchQueue').doc(user.uid);
-      await queueRef.delete();
+      const leaveQueueFunction = functions().httpsCallable('leaveQueue');
+      await leaveQueueFunction();
       setInQueue(false);
+      setQueueStatus('');
     } catch (error) {
       console.error("Error leaving queue:", error);
+      setQueueStatus('In Queue'); // Revert status if leaving fails
       setErrorMessage("Error leaving queue. Please try again.");
     }
   };
@@ -415,21 +436,21 @@ export default function VideoCallScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-      {remoteStream && (
-        <RTCView
-          streamURL={remoteStream.toURL()}
-          style={styles.remoteVideo}
-          objectFit="cover"
-        />
-      )}
-      {localStream && (
-        <RTCView
-          streamURL={localStream.toURL()}
-          style={styles.localVideo}
-          objectFit="cover"
-          zOrder={1}
-        />
-      )}
+        {remoteStream && (
+          <RTCView
+            streamURL={remoteStream.toURL()}
+            style={styles.remoteVideo}
+            objectFit="cover"
+          />
+        )}
+        {localStream && (
+          <RTCView
+            streamURL={localStream.toURL()}
+            style={styles.localVideo}
+            objectFit="cover"
+            zOrder={1}
+          />
+        )}
         {!inQueue && !callConnected && (
           <Pressable
             style={[styles.button, styles.findButton]}
@@ -440,7 +461,10 @@ export default function VideoCallScreen() {
         )}
         {inQueue && !callConnected && (
           <>
-            <Text style={styles.waitingText}>Waiting for a match...</Text>
+            <Text style={styles.waitingText}>{queueStatus}</Text>
+            {queueStatus === 'In Queue' && (
+              <ActivityIndicator size="large" color="#ffffff" />
+            )}
             <Pressable
               style={[styles.button, styles.leaveButton]}
               onPress={leaveQueue}
