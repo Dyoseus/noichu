@@ -4,6 +4,7 @@ import { View, Text, StyleSheet, Pressable, Alert, AppState } from 'react-native
 import { SafeAreaView } from 'react-native-safe-area-context';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
+import database from '@react-native-firebase/database';
 import functions from '@react-native-firebase/functions';
 import { RTCPeerConnection, RTCIceCandidate, RTCSessionDescription, mediaDevices, RTCView } from 'react-native-webrtc';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
@@ -36,6 +37,24 @@ export default function VideoCallScreen() {
 
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (user) {
+      const matchListener = database()
+        .ref(`userMatches/${user.uid}`)
+        .on('value', snapshot => {
+          const matchData = snapshot.val();
+          if (matchData) {
+            setMatchedUser({ userId: matchData.matchedWith });
+            setCallId(matchData.callId);
+            initializeWebRTC(matchData.callId, matchData.matchedWith);
+            database().ref(`userMatches/${user.uid}`).remove();
+          }
+        });
+
+      return () => database().ref(`userMatches/${user.uid}`).off('value', matchListener);
+    }
+  }, [user]);
 
   useEffect(() => {
     let timer;
@@ -110,83 +129,15 @@ export default function VideoCallScreen() {
 
   const findMatch = async () => {
     if (!user) return;
-  
+
     setInQueue(true);
+    setErrorMessage('');
+    
     try {
-      const findMatchFunction = functions().httpsCallable('findMatch');
-      await findMatchFunction();
-  
-      const queueRef = firestore().collection('matchQueue').doc(user.uid);
-      const userDoc = await firestore().collection('users').doc(user.uid).get();
-      const userData = userDoc.data();
-  
-      const unsubscribe = firestore().collection('matchQueue')
-        .where('gender', '==', userData.interestedIn[0]) // Assuming interestedIn array has at least one element
-        .where('interestedIn', 'array-contains', userData.gender)
-        .orderBy('timestamp')
-        .limit(1)
-        .onSnapshot(async (snapshot) => {
-          if (snapshot && !snapshot.empty) {
-            const matchDoc = snapshot.docs[0];
-            if (matchDoc && matchDoc.id !== user.uid) {
-              const matchData = matchDoc.data();
-              if (matchData && matchData.userId) {
-                // Check if the user has already been matched with this person
-                const pastMatches = userData.pastMatches || [];
-                if (pastMatches.includes(matchData.userId)) {
-                  console.log('Already matched with this user, finding another match...');
-                  return;
-                }
-  
-                // Additional check to ensure the matched user is still in the queue
-                const matchQueueDoc = await firestore().collection('matchQueue').doc(matchData.userId).get();
-                if (!matchQueueDoc.exists) {
-                  console.log('Matched user has left the queue, finding another match...');
-                  return;
-                }
-  
-                setMatchedUser(matchData);
-  
-                const callId = [user.uid, matchData.userId].sort().join('_');
-                setCallId(callId);
-                const callRef = firestore().collection('calls').doc(callId);
-                await callRef.set({
-                  users: [user.uid, matchData.userId],
-                  startedAt: firestore.FieldValue.serverTimestamp(),
-                });
-  
-                try {
-                  await queueRef.delete();
-                  await firestore().collection('matchQueue').doc(matchData.userId).delete();
-                } catch (error) {
-                  console.error("Error removing users from queue:", error);
-                }
-  
-                // Update past matches for both users
-                await firestore().collection('users').doc(user.uid).update({
-                  pastMatches: firestore.FieldValue.arrayUnion(matchData.userId)
-                });
-                await firestore().collection('users').doc(matchData.userId).update({
-                  pastMatches: firestore.FieldValue.arrayUnion(user.uid)
-                });
-  
-                unsubscribe();
-  
-                initializeWebRTC(callId, matchData.userId);
-              }
-            }
-          }
-        }, (error) => {
-          console.error("Error in matchQueue snapshot:", error);
-          setInQueue(false);
-        });
-  
-      return () => {
-        unsubscribe();
-        queueRef.delete().catch(error => console.error("Error removing user from queue:", error));
-      };
+      const enterQueue = functions().httpsCallable('enterQueue');
+      await enterQueue();
     } catch (error) {
-      console.error("Error finding match:", error);
+      console.error("Error entering queue:", error);
       setInQueue(false);
       setErrorMessage("Error finding match. Please try again.");
     }
@@ -196,8 +147,8 @@ export default function VideoCallScreen() {
     if (!user) return;
 
     try {
-      const queueRef = firestore().collection('matchQueue').doc(user.uid);
-      await queueRef.delete();
+      const leaveQueueFunction = functions().httpsCallable('leaveQueue');
+      await leaveQueueFunction();
       setInQueue(false);
     } catch (error) {
       console.error("Error leaving queue:", error);
@@ -207,6 +158,8 @@ export default function VideoCallScreen() {
 
   const initializeWebRTC = async (callId, matchedUserId) => {
     try {
+      console.log('Initializing WebRTC for call:', callId);
+      
       const twilioToken = await functions().httpsCallable('getTwilioToken')();
       
       peerConnection.current = new RTCPeerConnection({
@@ -232,7 +185,7 @@ export default function VideoCallScreen() {
           sendICECandidate(callId, event.candidate.toJSON());
         }
       };
-  
+
       peerConnection.current.onconnectionstatechange = (event) => {
         console.log('Connection state change:', peerConnection.current.connectionState);
         if (peerConnection.current.connectionState === 'connected') {
@@ -252,9 +205,12 @@ export default function VideoCallScreen() {
       }
     
       listenForICECandidates(callId);
+
+      console.log('WebRTC initialization completed successfully');
     } catch (error) {
       console.error("Error initializing WebRTC:", error);
       setErrorMessage("Error initializing call. Please try again.");
+      handleLeaveCall();
     }
   };
 
@@ -397,12 +353,6 @@ export default function VideoCallScreen() {
       if (callId) {
         const leaveCall = functions().httpsCallable('leaveCall');
         await leaveCall({ callId });
-        
-        // Update call status in Firestore
-        await firestore().collection('calls').doc(callId).update({
-          status: 'ended',
-          endedAt: firestore.FieldValue.serverTimestamp(),
-        });
       }
       
       handleCallEnded();
