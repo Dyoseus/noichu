@@ -1,19 +1,20 @@
-// PostCallScreen.js
-
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Image, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Image, Dimensions, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
+import storage from '@react-native-firebase/storage';
 import Swiper from 'react-native-swiper';
+import ViewShot from 'react-native-view-shot';
 
 const { width } = Dimensions.get('window');
 
 export default function PostCallScreen({ route }) {
-  const { userId } = route.params;
+  const { userId, callId, screenshots } = route.params;
   const [otherUserProfile, setOtherUserProfile] = useState(null);
   const navigation = useNavigation();
   const currentUser = auth().currentUser;
+  const viewShotRef = React.useRef();
 
   useEffect(() => {
     const fetchOtherUserProfile = async () => {
@@ -89,6 +90,58 @@ export default function PostCallScreen({ route }) {
     }
   };
 
+  const handleReport = async () => {
+    Alert.alert(
+      "Report User",
+      "Are you sure you want to report this user?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel"
+        },
+        { 
+          text: "Report", 
+          onPress: async () => {
+            try {
+              // Capture a screenshot of the current view
+              const uri = await viewShotRef.current.capture();
+
+              // Upload the screenshot to Firebase Storage
+              const screenshotRef = storage().ref(`reports/${callId}_${Date.now()}.jpg`);
+              await screenshotRef.putFile(uri);
+
+              // Get the download URL of the uploaded screenshot
+              const downloadURL = await screenshotRef.getDownloadURL();
+
+              // Upload call screenshots to Firebase Storage
+              const screenshotUrls = await Promise.all(screenshots.map(async (screenshot, index) => {
+                const screenshotRef = storage().ref(`reports/${callId}_call_${index}.jpg`);
+                await screenshotRef.putFile(screenshot);
+                return await screenshotRef.getDownloadURL();
+              }));
+
+              // Create a report document in Firestore
+              await firestore().collection('reports').add({
+                reportedUserId: userId,
+                reportedByUserId: currentUser.uid,
+                callId: callId,
+                timestamp: firestore.FieldValue.serverTimestamp(),
+                postCallScreenshotUrl: downloadURL,
+                callScreenshotUrls: screenshotUrls,
+              });
+
+              Alert.alert("Report Submitted", "Thank you for your report. We will review it shortly.");
+              navigation.navigate('Video');
+            } catch (error) {
+              console.error('Error submitting report:', error);
+              Alert.alert("Error", "Failed to submit report. Please try again.");
+            }
+          }
+        }
+      ]
+    );
+  };
+
   if (!otherUserProfile) {
     return (
       <View style={styles.container}>
@@ -98,7 +151,7 @@ export default function PostCallScreen({ route }) {
   }
 
   return (
-    <View style={styles.container}>
+    <ViewShot ref={viewShotRef} style={styles.container}>
       <Text style={styles.username}>{otherUserProfile.firstName}</Text>
       <View style={styles.swiperContainer}>
         <Swiper 
@@ -129,7 +182,13 @@ export default function PostCallScreen({ route }) {
           <Text style={styles.buttonText}>🗑️</Text>
         </Pressable>
       </View>
-    </View>
+      <Pressable
+        style={[styles.button, styles.reportButton]}
+        onPress={handleReport}
+      >
+        <Text style={styles.buttonText}>Report User</Text>
+      </Pressable>
+    </ViewShot>
   );
 }
 
@@ -204,6 +263,10 @@ const styles = StyleSheet.create({
   },
   downvoteButton: {
     backgroundColor: '#f44336',
+  },
+  reportButton: {
+    backgroundColor: '#FF9800',
+    marginTop: 20,
   },
   buttonText: {
     color: 'white',
