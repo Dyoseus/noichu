@@ -10,6 +10,15 @@ import { RTCPeerConnection, RTCIceCandidate, RTCSessionDescription, mediaDevices
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import * as Location from 'expo-location';
 
+import {
+  AdMobBanner,
+  AdMobInterstitial,
+  PublisherBanner,
+  AdMobRewarded,
+} from 'react-native-admob'
+
+
+
 export default function VideoCallScreen() {
   const [user, setUser] = useState(null);
   const [inQueue, setInQueue] = useState(false);

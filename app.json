@@ -26,8 +26,8 @@
           "locationWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location while you are using the app.",
           "isAndroidBackgroundLocationEnabled": true
         }
-      ]
-
+      ],
+      "react-native-google-mobile-ads"
     ],
     "splash": {
       "image": "./assets/splash.png",

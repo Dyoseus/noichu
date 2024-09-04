@@ -27,6 +27,24 @@ export default function MessageScreen() {
     setFriends(friendsList.filter(friend => friend !== null));
   };
 
+
+  const handleRemoveFriend = async () => {
+    if (!selectedFriend) return;
+
+    try {
+      await firestore().collection('friends').doc(`${currentUser.uid}_${selectedFriend.id}`).delete();
+      setFriends(friends.filter(friend => friend.id !== selectedFriend.id));
+      setModalVisible(false);
+      setSelectedFriend(null);
+      alert('Friend removed successfully');
+      if (typeof onFriendRemoved === 'function') {
+        onFriendRemoved(); // Calls the callback to indicate a friend was removed
+      }
+    } catch (error) {
+      alert('Failed to remove friend: ' + error.message);
+    }
+  };
+
   const getFriendData = async (friendId) => {
     const friendDoc = await firestore().collection('users').doc(friendId).get();
     if (friendDoc.exists) {
@@ -68,6 +86,12 @@ export default function MessageScreen() {
           <TouchableOpacity style={styles.friendContainer} onPress={() => handlePress(item)}>
             <Text style={styles.friendText}>{item.username}</Text>
             <Text style={styles.latestMessageText}>{item.latestMessage}</Text>
+            <TouchableOpacity
+              style={styles.removeButton}
+              onPress={() => handleRemoveButtonPress(item)}
+            >
+              <Text style={styles.removeButtonText}>Remove</Text>
+            </TouchableOpacity>
           </TouchableOpacity>
         )}
       />
@@ -91,6 +115,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'sans-serif',
     fontWeight: 'bold',
+  },
+  removeButton: {
+    backgroundColor: '#ff4444',
+    padding: 8,
+    borderRadius: 4,
   },
   latestMessageText: {
     fontSize: 14,
