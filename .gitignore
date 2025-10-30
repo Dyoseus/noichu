@@ -37,6 +37,7 @@ yarn-error.*
 # but google-services.json and GoogleService-Info.plist contain API keys
 google-services.json
 GoogleService-Info.plist
+SECURITY.md
 
 # typescript
 *.tsbuildinfo
@@ -83,6 +84,7 @@ yarn-error.*
 # but google-services.json and GoogleService-Info.plist contain API keys
 google-services.json
 GoogleService-Info.plist
+SECURITY.md
 
 # typescript
 *.tsbuildinfo
