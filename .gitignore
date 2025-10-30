@@ -29,7 +29,14 @@ yarn-error.*
 *.pem
 
 # local env files
+.env
 .env*.local
+
+# Firebase and Google Configuration - DO NOT COMMIT
+# Note: .firebaserc and firebase.json are safe to commit (no secrets)
+# but google-services.json and GoogleService-Info.plist contain API keys
+google-services.json
+GoogleService-Info.plist
 
 # typescript
 *.tsbuildinfo
@@ -68,7 +75,14 @@ yarn-error.*
 *.pem
 
 # local env files
+.env
 .env*.local
+
+# Firebase and Google Configuration - DO NOT COMMIT
+# Note: .firebaserc and firebase.json are safe to commit (no secrets)
+# but google-services.json and GoogleService-Info.plist contain API keys
+google-services.json
+GoogleService-Info.plist
 
 # typescript
 *.tsbuildinfo
